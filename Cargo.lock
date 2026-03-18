@@ -1188,12 +1188,18 @@ dependencies = [
 name = "eagent-persistence"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "chrono",
+ "dirs",
  "eagent-contracts",
  "eagent-protocol",
+ "rusqlite",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "toml 0.8.23",
  "tracing",
 ]
 
@@ -1269,9 +1275,12 @@ dependencies = [
 name = "eagent-tools"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "eagent-protocol",
+ "regex",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
