@@ -1161,6 +1161,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "eagent-index"
+version = "0.1.0"
+dependencies = [
+ "eagent-protocol",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
+name = "eagent-mcp"
+version = "0.1.0"
+dependencies = [
+ "eagent-protocol",
+ "eagent-tools",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "eagent-persistence"
+version = "0.1.0"
+dependencies = [
+ "eagent-contracts",
+ "eagent-protocol",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "eagent-planner"
+version = "0.1.0"
+dependencies = [
+ "eagent-contracts",
+ "eagent-protocol",
+ "eagent-providers",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "eagent-protocol"
 version = "0.1.0"
 dependencies = [
@@ -1185,6 +1236,33 @@ dependencies = [
  "tokio",
  "tracing",
  "trait-variant",
+]
+
+[[package]]
+name = "eagent-runtime"
+version = "0.1.0"
+dependencies = [
+ "eagent-contracts",
+ "eagent-persistence",
+ "eagent-protocol",
+ "eagent-providers",
+ "eagent-tools",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "eagent-skills"
+version = "0.1.0"
+dependencies = [
+ "eagent-protocol",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]

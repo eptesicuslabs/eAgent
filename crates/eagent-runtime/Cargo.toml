@@ -1,0 +1,18 @@
+[package]
+name = "eagent-runtime"
+description = "eAgent runtime: TaskGraph scheduler, AgentPool, and conflict resolver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+eagent-protocol = { workspace = true }
+eagent-contracts = { workspace = true }
+eagent-providers = { workspace = true }
+eagent-tools = { workspace = true }
+eagent-persistence = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }

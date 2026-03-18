@@ -17,6 +17,12 @@ eagent-protocol = { path = "crates/eagent-protocol" }
 eagent-contracts = { path = "crates/eagent-contracts" }
 eagent-tools = { path = "crates/eagent-tools" }
 eagent-providers = { path = "crates/eagent-providers" }
+eagent-persistence = { path = "crates/eagent-persistence" }
+eagent-runtime = { path = "crates/eagent-runtime" }
+eagent-planner = { path = "crates/eagent-planner" }
+eagent-skills = { path = "crates/eagent-skills" }
+eagent-mcp = { path = "crates/eagent-mcp" }
+eagent-index = { path = "crates/eagent-index" }
 
 # GUI
 egui = "0.31"

@@ -1,0 +1,13 @@
+[package]
+name = "eagent-skills"
+description = "eSkill loader, manifest parser, and invocation for eAgent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+eagent-protocol = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
