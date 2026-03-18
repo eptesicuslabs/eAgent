@@ -1,0 +1,15 @@
+[package]
+name = "eagent-contracts"
+description = "Shared domain types, configuration, and provider metadata for eAgent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+eagent-protocol = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }

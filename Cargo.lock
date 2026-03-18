@@ -1148,6 +1148,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
+name = "eagent-contracts"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "eagent-protocol",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "toml 0.8.23",
+ "uuid",
+]
+
+[[package]]
 name = "eagent-protocol"
 version = "0.1.0"
 dependencies = [
