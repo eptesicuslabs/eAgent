@@ -1,0 +1,14 @@
+[package]
+name = "eagent-protocol"
+description = "Agent protocol types, message contracts, and TaskGraph definitions for eAgent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }

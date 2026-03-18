@@ -13,6 +13,7 @@ authors = ["eCode Contributors"]
 ecode-contracts = { path = "crates/ecode-contracts" }
 ecode-core = { path = "crates/ecode-core" }
 ecode-desktop-app = { path = "crates/ecode-desktop-app" }
+eagent-protocol = { path = "crates/eagent-protocol" }
 
 # GUI
 egui = "0.31"

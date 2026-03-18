@@ -1,0 +1,2 @@
+# Use GNU toolchain to avoid POSIX link.exe conflict with MSVC link.exe.
+# Git for Windows ships /usr/bin/link which shadows MSVC's linker.
