@@ -6,6 +6,7 @@ use eagent_protocol::messages::RiskLevel;
 use serde_json::Value;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use thiserror::Error;
 
 /// Error from tool execution.
@@ -21,6 +22,30 @@ pub enum ToolError {
     Timeout(u64),
 }
 
+/// Shared services available to tools during execution.
+/// Populated by the runtime at startup. Holds infrastructure like terminal managers.
+pub struct ToolServices {
+    _private: (), // placeholder — fields added as tools are migrated
+}
+
+impl ToolServices {
+    pub fn new() -> Self {
+        Self { _private: () }
+    }
+}
+
+impl Default for ToolServices {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Debug for ToolServices {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ToolServices").finish()
+    }
+}
+
 /// Context provided to a tool during execution.
 #[derive(Debug, Clone)]
 pub struct ToolContext {
@@ -30,6 +55,8 @@ pub struct ToolContext {
     pub agent_id: eagent_protocol::ids::AgentId,
     /// The task ID this tool call belongs to.
     pub task_id: eagent_protocol::ids::TaskId,
+    /// Optional shared services (terminal manager, etc.).
+    pub services: Option<Arc<ToolServices>>,
 }
 
 /// Result of a tool execution.
@@ -158,6 +185,7 @@ mod tests {
             workspace_root: "/tmp".into(),
             agent_id: eagent_protocol::ids::AgentId::new(),
             task_id: eagent_protocol::ids::TaskId::new(),
+            services: None,
         };
         let result = tool.execute(json!({"input": "hello"}), &ctx).await.unwrap();
         assert!(!result.is_error);
