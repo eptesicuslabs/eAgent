@@ -1,5 +1,6 @@
 //! eAgent Providers — trait and implementations for LLM backends.
 
+pub mod codex;
 pub mod llama_cpp;
 pub mod registry;
 
