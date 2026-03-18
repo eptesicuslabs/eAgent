@@ -1,5 +1,6 @@
 //! eAgent Tools — trait definition and built-in tool implementations.
 
+pub mod filesystem;
 pub mod registry;
 
 use eagent_protocol::messages::RiskLevel;
