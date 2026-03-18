@@ -66,3 +66,21 @@
   - `eagent-providers`: LlamaCpp (streaming SSE, 17 tests) + Codex (JSON-RPC, process management, 18 tests) wrapped in Provider trait.
   - `register_builtin_tools()` function wires all 16 tools into a ToolRegistry.
   - All 176 tests pass across the full workspace.
+- Phase 3 Orchestration: built multi-agent runtime in eagent-runtime.
+  - `scheduler.rs`: TaskGraph DAG scheduler with Kahn's cycle detection, dependency tracking, concurrency-aware task selection.
+  - `agent_pool.rs`: AgentPool that spawns worker agents via Provider trait, translates ProviderEvents to AgentMessages.
+  - `conflict.rs`: ConflictResolver for file-level merge conflict detection.
+  - `engine.rs`: RuntimeEngine tying it all together — submit, run scheduling loop, cancel, persist TaskGraphEvents. 32 tests.
+- Phase 4 Providers: added ApiKeyProvider for generic OpenAI-compatible endpoints.
+  - Extracted shared SSE parsing into `sse.rs` module (reused by LlamaCpp and ApiKey providers).
+  - Supports streaming, tool/function calling, model discovery. 72 provider tests total.
+- Phase 5a UI Core: reworked React shell for multi-agent state management.
+  - Replaced single-thread Zustand store with EAgentStore (mode, activeGraphs, providers, terminals).
+  - Added Tauri event bridge (6 event types), TopBar with mode switcher, Composer with oversight selector.
+  - Updated Sidebar with TaskGraph listing and status indicators.
+- Phase 6 eWork: added document tools (create_document, summarize, read_pdf stub, research). 85 tool tests total.
+- Phase 7 Ecosystem: added eSkill manifest parser/loader (10 tests) and eMCP manifest parser/loader (12 tests).
+- Phase 8 Project Index: added file tree indexing with language detection and project graph summary generation. 17 tests.
+- Added SimplePlanner for single-task graph creation and 5 Tauri eAgent commands (submit, cancel, providers, oversight).
+- Fixed critical self-critique issues: tool execution loop in RuntimeEngine, provider routing bug, SSE true streaming, UTF-8 safety in limit_output, session_status fallback.
+- Final state: 292 tests passing, React build clean, 28 commits on master.
