@@ -1233,15 +1233,19 @@ dependencies = [
 name = "eagent-providers"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "eagent-contracts",
  "eagent-protocol",
  "eagent-tools",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "shared_child",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
  "trait-variant",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1278,6 +1282,7 @@ dependencies = [
  "anyhow",
  "eagent-protocol",
  "git2",
+ "portable-pty",
  "regex",
  "reqwest 0.12.28",
  "serde",
