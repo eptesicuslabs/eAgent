@@ -1,4 +1,10 @@
-export type ProviderKind = "codex" | "llama-cpp";
+// =============================================================================
+// eAgent platform types
+// =============================================================================
+
+// --- Legacy types kept for backward compatibility during migration ---
+
+export type ProviderKind = "codex" | "llama-cpp" | "api-key";
 export type RuntimeMode = "approval-required" | "full-access";
 export type InteractionMode = "chat" | "plan";
 export type CodexReasoningEffort = "low" | "medium" | "high";
@@ -31,6 +37,200 @@ export type ProviderRuntimeEventKind =
   | "tool_completed"
   | "runtime_warning"
   | "runtime_error";
+
+// --- eAgent platform types ---
+
+/** The two workstation modes in eAgent */
+export type AgentMode = "ecode" | "ework";
+
+/** Oversight modes: how much human approval is required */
+export type OversightMode = "full-autonomy" | "approve-risky" | "approve-all";
+
+/** Risk level for tool calls */
+export type RiskLevel = "low" | "medium" | "high";
+
+/** Task status within a TaskGraph */
+export type TaskStatus =
+  | "pending"
+  | "ready"
+  | "scheduled"
+  | "running"
+  | "awaiting-review"
+  | "complete"
+  | "failed"
+  | "cancelled";
+
+/** Trace entry kinds for the agent execution log */
+export type TraceEntryKind =
+  | "thinking"
+  | "tool-call"
+  | "tool-result"
+  | "file-change"
+  | "terminal-output"
+  | "question"
+  | "error"
+  | "status";
+
+/** A single entry in an agent's execution trace */
+export interface TraceEntry {
+  id: string;
+  kind: TraceEntryKind;
+  agentId: string | null;
+  timestamp: string;
+  summary: string;
+  detail: string | null;
+  /** For tool-call entries */
+  toolName: string | null;
+  /** For file-change entries */
+  filePath: string | null;
+}
+
+/** A node in the TaskGraph DAG */
+export interface TaskNode {
+  id: string;
+  description: string;
+  status: TaskStatus;
+  assignedAgent: string | null;
+  assignedProvider: string | null;
+  toolsAllowed: string[];
+  error: string | null;
+  retries: number;
+  cancelReason: string | null;
+}
+
+/** An edge in the TaskGraph DAG (dependency -> dependent) */
+export interface TaskEdge {
+  from: string;
+  to: string;
+}
+
+/** A file diff produced by an agent */
+export interface FileMutation {
+  taskId: string;
+  agentId: string | null;
+  path: string;
+  diff: string;
+  timestamp: string;
+}
+
+/** An oversight request from an agent */
+export interface OversightRequest {
+  requestId: string;
+  graphId: string;
+  taskId: string;
+  action: string;
+  context: string;
+  riskLevel: RiskLevel;
+  timestamp: string;
+}
+
+/** The decision on an oversight request */
+export type OversightDecision = "approve" | "deny" | "modify";
+
+/** State of a single TaskGraph (what the frontend holds) */
+export interface TaskGraphState {
+  graphId: string;
+  rootTaskId: string;
+  userPrompt: string;
+  nodes: Record<string, TaskNode>;
+  edges: TaskEdge[];
+  traces: Record<string, TraceEntry[]>; // keyed by taskId
+  diffs: Record<string, FileMutation[]>; // keyed by taskId
+  oversightRequests: Record<string, OversightRequest>; // keyed by requestId
+  status: "planning" | "running" | "paused" | "complete" | "failed";
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Provider availability status */
+export interface ProviderStatus {
+  providerId: string;
+  kind: ProviderKind;
+  displayName: string;
+  status: "available" | "unavailable" | "error" | "starting";
+  models: string[];
+  error: string | null;
+  maxConcurrentSessions: number;
+  activeSessions: number;
+}
+
+/** Terminal state */
+export interface TerminalState {
+  id: string;
+  agentId: string | null;
+  graphId: string | null;
+  taskId: string | null;
+  title: string;
+  buffer: string;
+  isAlive: boolean;
+}
+
+/** Agent configuration */
+export interface AgentConfig {
+  oversightMode: OversightMode;
+  maxConcurrency: number;
+  plannerProvider: string | null;
+  workerProvider: string | null;
+  fallbackProvider: string | null;
+}
+
+// --- Tauri event payloads (Rust -> React) ---
+
+export interface TaskGraphUpdatePayload {
+  graphId: string;
+  rootTaskId: string;
+  userPrompt: string;
+  nodes: Record<string, TaskNode>;
+  edges: TaskEdge[];
+  status: TaskGraphState["status"];
+}
+
+export interface AgentTracePayload {
+  graphId: string;
+  taskId: string;
+  agentId: string;
+  entry: TraceEntry;
+}
+
+export interface FileMutationPayload {
+  graphId: string;
+  taskId: string;
+  agentId: string | null;
+  path: string;
+  diff: string;
+}
+
+export interface OversightRequestPayload {
+  graphId: string;
+  taskId: string;
+  requestId: string;
+  action: string;
+  context: string;
+  riskLevel: RiskLevel;
+}
+
+export interface TerminalEventPayload {
+  terminalId: string;
+  agentId: string | null;
+  graphId: string | null;
+  taskId: string | null;
+  title: string | null;
+  data: string;
+  isAlive: boolean;
+}
+
+export interface ProviderStatusPayload {
+  providerId: string;
+  kind: ProviderKind;
+  displayName: string;
+  status: ProviderStatus["status"];
+  models: string[];
+  error: string | null;
+  maxConcurrentSessions: number;
+  activeSessions: number;
+}
+
+// --- Legacy types kept for existing components ---
 
 export interface ThreadSettings {
   provider: ProviderKind;
@@ -323,5 +523,14 @@ export interface NativeApi {
   settings: {
     get: () => Promise<AppConfig>;
     save: (config: AppConfig) => Promise<void>;
+  };
+  // --- eAgent platform API ---
+  eagent: {
+    submitTask: (prompt: string) => Promise<string>;
+    cancelGraph: (graphId: string) => Promise<void>;
+    getGraph: (graphId: string) => Promise<TaskGraphState>;
+    approveOversight: (requestId: string) => Promise<void>;
+    denyOversight: (requestId: string) => Promise<void>;
+    getProviders: () => Promise<ProviderStatus[]>;
   };
 }

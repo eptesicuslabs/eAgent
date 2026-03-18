@@ -7,6 +7,8 @@ import type {
   OrchestrationDispatchCommand,
   OrchestrationSnapshot,
   ProjectSearchEntry,
+  ProviderStatus,
+  TaskGraphState,
   TerminalRecord,
 } from "./types";
 
@@ -15,6 +17,29 @@ async function subscribe(eventName: string, listener: () => void) {
   return () => {
     unlisten();
   };
+}
+
+/**
+ * Safely invoke a Tauri command. If the command doesn't exist yet
+ * (backend not implemented), catches the error and returns the fallback.
+ */
+async function safeInvoke<T>(command: string, args?: Record<string, unknown>, fallback?: T): Promise<T> {
+  try {
+    return await invoke<T>(command, args);
+  } catch (error: unknown) {
+    // If the backend command doesn't exist yet, return fallback gracefully
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      message.includes("not found") ||
+      message.includes("unknown command") ||
+      message.includes("not registered") ||
+      message.includes("plugin not found")
+    ) {
+      console.warn(`[eAgent] Tauri command "${command}" not available yet:`, message);
+      return fallback as T;
+    }
+    throw error;
+  }
 }
 
 export function createTauriNativeApi(): NativeApi {
@@ -73,6 +98,33 @@ export function createTauriNativeApi(): NativeApi {
     settings: {
       get: () => invoke<AppConfig>("settings_get"),
       save: (config) => invoke("settings_save", { config }),
+    },
+    // --- eAgent platform API ---
+    eagent: {
+      submitTask: (prompt) =>
+        safeInvoke<string>("eagent_submit_task", { prompt }, ""),
+      cancelGraph: (graphId) =>
+        safeInvoke<void>("eagent_cancel_graph", { graphId }),
+      getGraph: (graphId) =>
+        safeInvoke<TaskGraphState>("eagent_get_graph", { graphId }, {
+          graphId,
+          rootTaskId: "",
+          userPrompt: "",
+          nodes: {},
+          edges: [],
+          traces: {},
+          diffs: {},
+          oversightRequests: {},
+          status: "planning",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }),
+      approveOversight: (requestId) =>
+        safeInvoke<void>("eagent_approve_oversight", { requestId }),
+      denyOversight: (requestId) =>
+        safeInvoke<void>("eagent_deny_oversight", { requestId }),
+      getProviders: () =>
+        safeInvoke<ProviderStatus[]>("eagent_get_providers", undefined, []),
     },
   };
 }

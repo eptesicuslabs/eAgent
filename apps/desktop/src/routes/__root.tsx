@@ -7,9 +7,10 @@ import {
   Outlet,
   createRootRouteWithContext,
 } from "@tanstack/react-router";
-import { startTransition, useEffect } from "react";
+import { startTransition, useEffect, useRef } from "react";
 import { readNativeApi } from "~/nativeApi";
 import { useStore } from "~/store";
+import { setupEAgentEventBridge } from "~/eventBridge";
 
 export const bootstrapQueryKey = ["app", "bootstrap"] as const;
 export const snapshotQueryKey = ["orchestration", "snapshot"] as const;
@@ -25,6 +26,7 @@ function RootRouteView() {
   const queryClient = useQueryClient();
   const syncBootstrap = useStore((state) => state.syncBootstrap);
   const syncSnapshot = useStore((state) => state.syncSnapshot);
+  const eventBridgeCleanup = useRef<(() => void) | null>(null);
 
   const bootstrapQuery = useQuery({
     queryKey: bootstrapQueryKey,
@@ -67,6 +69,7 @@ function RootRouteView() {
     });
   }, [snapshotQuery.data, syncSnapshot]);
 
+  // Legacy event listeners (domain, terminal, settings, status)
   useEffect(() => {
     if (!api) return;
 
@@ -101,10 +104,51 @@ function RootRouteView() {
     };
   }, [api, queryClient]);
 
+  // eAgent event bridge (task-graph-update, agent-trace, etc.)
+  useEffect(() => {
+    let disposed = false;
+
+    void (async () => {
+      try {
+        const cleanup = await setupEAgentEventBridge();
+        if (disposed) {
+          cleanup();
+        } else {
+          eventBridgeCleanup.current = cleanup;
+        }
+      } catch (error) {
+        console.warn("[eAgent] Event bridge setup failed (backend may not be ready yet):", error);
+      }
+    })();
+
+    return () => {
+      disposed = true;
+      if (eventBridgeCleanup.current) {
+        eventBridgeCleanup.current();
+        eventBridgeCleanup.current = null;
+      }
+    };
+  }, []);
+
+  // Fetch initial provider status
+  useEffect(() => {
+    if (!api) return;
+    void (async () => {
+      try {
+        const providers = await api.eagent.getProviders();
+        for (const provider of providers) {
+          useStore.getState().onProviderStatus(provider);
+        }
+      } catch {
+        // Backend not ready yet, providers will arrive via events
+      }
+    })();
+  }, [api]);
+
   if (!api || bootstrapQuery.isLoading || snapshotQuery.isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background text-sm text-muted-foreground">
-        Connecting to eCode runtime...
+        Connecting to eAgent runtime...
       </div>
     );
   }
