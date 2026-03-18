@@ -119,6 +119,30 @@ pub trait Tool: Send + Sync {
     }
 }
 
+/// Register all built-in tools into a ToolRegistry.
+pub fn register_builtin_tools(registry: &mut registry::ToolRegistry) {
+    use std::sync::Arc;
+    // Filesystem tools
+    registry.register(Arc::new(filesystem::ListDirectoryTool));
+    registry.register(Arc::new(filesystem::ReadFileTool));
+    registry.register(Arc::new(filesystem::ReadMultipleFilesTool));
+    registry.register(Arc::new(filesystem::SearchFilesTool));
+    registry.register(Arc::new(filesystem::WriteFileTool));
+    registry.register(Arc::new(filesystem::EditFileTool));
+    registry.register(Arc::new(filesystem::ApplyPatchTool));
+    // Web tools
+    registry.register(Arc::new(web::WebSearchTool));
+    registry.register(Arc::new(web::WebFetchTool));
+    // Git tools
+    registry.register(Arc::new(git::GitStatusTool));
+    registry.register(Arc::new(git::GitDiffTool));
+    registry.register(Arc::new(git::GitCommitTool));
+    registry.register(Arc::new(git::GitBranchTool));
+    // Terminal tools
+    registry.register(Arc::new(terminal::CreateTerminalTool));
+    registry.register(Arc::new(terminal::TerminalWriteTool));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

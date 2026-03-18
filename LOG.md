@@ -60,3 +60,9 @@
 - Switched to GNU toolchain (`rust-toolchain.toml`) to avoid POSIX link.exe shadowing MSVC linker.
 - Installed MinGW-w64 (WinLibs) via winget for the GNU toolchain.
 - All 55 tests pass across the full workspace (existing + new crates).
+- Phase 2 Extract: migrated all business logic from ecode-core into eagent-* crates behind trait interfaces.
+  - `eagent-persistence`: EventStore (SQLite, WAL mode, 7 tests) + ConfigManager (AgentConfig, portable-first, 5 tests).
+  - `eagent-tools`: 16 built-in tools — filesystem (7: list, read, read_multiple, search, write, edit, patch), web (2: search, fetch), git (4: status, diff, commit, branch), terminal (2: create, write) + TerminalManager. 64 tool tests total.
+  - `eagent-providers`: LlamaCpp (streaming SSE, 17 tests) + Codex (JSON-RPC, process management, 18 tests) wrapped in Provider trait.
+  - `register_builtin_tools()` function wires all 16 tools into a ToolRegistry.
+  - All 176 tests pass across the full workspace.
