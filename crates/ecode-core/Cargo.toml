@@ -1,0 +1,63 @@
+[package]
+name = "ecode-core"
+description = "Core business logic, Codex integration, and infrastructure for eCode"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ecode-contracts = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+reqwest = { workspace = true }
+
+# Database
+rusqlite = { workspace = true }
+
+# Git
+git2 = { workspace = true }
+
+# Terminal
+portable-pty = { workspace = true }
+
+# Diff & Syntax
+similar = { workspace = true }
+syntect = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+
+# Process
+shared_child = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
+
+# Config & IDs
+dirs = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+# Image
+image = { workspace = true }
+sha2 = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_System_JobObjects",
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_Security",
+] }
+
+[dev-dependencies]
+tempfile = "3"

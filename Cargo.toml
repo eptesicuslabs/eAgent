@@ -1,0 +1,77 @@
+[workspace]
+members = ["crates/*", "apps/desktop/src-tauri"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+authors = ["eCode Contributors"]
+
+[workspace.dependencies]
+# Internal crates
+ecode-contracts = { path = "crates/ecode-contracts" }
+ecode-core = { path = "crates/ecode-core" }
+ecode-desktop-app = { path = "crates/ecode-desktop-app" }
+
+# GUI
+egui = "0.31"
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "persistence"] }
+egui_extras = { version = "0.31", features = ["image"] }
+
+# Terminal
+portable-pty = "0.8"
+
+# Database
+rusqlite = { version = "0.32", features = ["bundled", "serde_json"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Git
+git2 = { version = "0.19", features = ["vendored-libgit2"] }
+
+# Diff & Syntax
+similar = "2"
+syntect = { version = "5", default-features = false, features = ["default-fancy"] }
+
+# Markdown
+pulldown-cmark = "0.12"
+
+# Async
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Process
+shared_child = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+
+# Config & IDs
+dirs = "6"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Native file dialog
+rfd = "0.15"
+
+# Image
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+
+# Crypto (for hashing attachments)
+sha2 = "0.10"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true

@@ -1,0 +1,22 @@
+
+> ecode-desktop-ui@0.1.0 tauri
+> tauri dev --no-watch
+
+
+> ecode-desktop-ui@0.1.0 dev
+> vite
+
+
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m534[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
+[2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[2m2026-03-16T19:04:08.000824Z[0m [32m INFO[0m [2mecode_core::orchestration::engine[0m[2m:[0m Rebuilding read model from event store...
+[2m2026-03-16T19:04:08.006841Z[0m [32m INFO[0m [2mecode_core::orchestration::engine[0m[2m:[0m Read model rebuilt successfully [3mevent_count[0m[2m=[0m26
+[2m2026-03-16T19:04:08.324571Z[0m [32m INFO[0m [2mecode_desktop_app::runtime[0m[2m:[0m Background systems initialized
+[2m2026-03-16T19:04:08.867072Z[0m [32m INFO[0m [2mecode_core::codex::version[0m[2m:[0m Detected Codex CLI version [3mversion[0m[2m=[0m0.107.0
+[2m2026-03-16T19:04:08.868216Z[0m [32m INFO[0m [2mecode_core::codex[0m[2m:[0m Spawning Codex CLI session [3mthread_id[0m[2m=[0m897fca42-ca71-44cd-ae75-8af2b20abeae [3msession_id[0m[2m=[0mab08e414-2329-4b10-befc-9f57ca7c2338
+[2m2026-03-16T19:04:09.886511Z[0m [32m INFO[0m [2mecode_core::codex[0m[2m:[0m Codex session initialized [3mthread_id[0m[2m=[0m897fca42-ca71-44cd-ae75-8af2b20abeae [3msession_id[0m[2m=[0mab08e414-2329-4b10-befc-9f57ca7c2338
+[2m2026-03-16T19:04:09.888034Z[0m [32m INFO[0m [2mecode_core::codex[0m[2m:[0m Killing Codex session [3mthread_id[0m[2m=[0m897fca42-ca71-44cd-ae75-8af2b20abeae
+[2m2026-03-16T19:04:09.888526Z[0m [32m INFO[0m [2mecode_core::platform[0m[2m:[0m Killed process tree [3mpid[0m[2m=[0m41056
+[2m2026-03-16T19:04:09.892897Z[0m [33m WARN[0m [2mecode_desktop_app::runtime[0m[2m:[0m Failed to refresh Codex model catalog; using fallback list [3merror[0m[2m=[0mCodex RPC error: Invalid request: missing field `params` (code: -32600)

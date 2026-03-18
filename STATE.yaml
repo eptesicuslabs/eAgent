@@ -1,0 +1,25 @@
+project: eCode
+date: 2026-03-17
+status: in_progress
+current_focus:
+  - typed tauri thread-view/transcript/terminal/review DTO seam
+  - shared desktop runtime extraction
+  - codex/t3-inspired product shell rebuild on tauri/react
+  - local-agent and llama.cpp hardening for portable windows
+  - release build and launch verification
+decisions:
+  ui_scope: tauri_react_desktop_shell
+  codex_role: primary_agent_provider
+  local_model_mode: managed_llama_server
+  local_model_scope: core_agent_loop_plus_web_search
+  codex_model_source: live_model_list_with_official_fallback
+  api_key_ui: hidden_until_product_requires_it
+  backend_runtime: rust_core_preserved
+  desktop_controller: shared_toolkit_neutral_crate
+known_gaps:
+  - tauri shell builds again, but transcript, plan, diff, and terminal views are still derived heuristically from the raw read model instead of backend-owned typed DTOs
+  - terminal updates still rely on coarse full-snapshot refreshes and single-buffer terminal state rather than richer typed deltas
+  - old egui shell still exists and carries legacy lint debt
+  - right-side plan/diff panel is still a lightweight baseline, not full Codex/T3 parity
+  - local-provider approvals and request-user-input are not fully interactive yet
+  - duckduckgo html parsing is still a pragmatic v1 backend despite the new timeouts and host guards
