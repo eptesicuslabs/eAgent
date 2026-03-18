@@ -1,7 +1,9 @@
 //! eAgent Tools — trait definition and built-in tool implementations.
 
 pub mod filesystem;
+pub mod git;
 pub mod registry;
+pub mod web;
 
 use eagent_protocol::messages::RiskLevel;
 use serde_json::Value;
