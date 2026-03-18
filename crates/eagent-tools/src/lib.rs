@@ -3,6 +3,7 @@
 pub mod filesystem;
 pub mod git;
 pub mod registry;
+pub mod terminal;
 pub mod web;
 
 use eagent_protocol::messages::RiskLevel;
@@ -28,12 +29,15 @@ pub enum ToolError {
 /// Shared services available to tools during execution.
 /// Populated by the runtime at startup. Holds infrastructure like terminal managers.
 pub struct ToolServices {
-    _private: (), // placeholder — fields added as tools are migrated
+    /// Terminal manager for PTY sessions (None if terminal support is disabled).
+    pub terminal_manager: Option<Arc<terminal::TerminalManager>>,
 }
 
 impl ToolServices {
     pub fn new() -> Self {
-        Self { _private: () }
+        Self {
+            terminal_manager: None,
+        }
     }
 }
 

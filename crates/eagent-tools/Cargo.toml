@@ -17,6 +17,7 @@ trait-variant = { workspace = true }
 regex = "1"
 reqwest = { workspace = true }
 git2 = { workspace = true }
+portable-pty = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
