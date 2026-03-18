@@ -15,6 +15,7 @@ ecode-core = { path = "crates/ecode-core" }
 ecode-desktop-app = { path = "crates/ecode-desktop-app" }
 eagent-protocol = { path = "crates/eagent-protocol" }
 eagent-contracts = { path = "crates/eagent-contracts" }
+eagent-tools = { path = "crates/eagent-tools" }
 
 # GUI
 egui = "0.31"
@@ -70,6 +71,7 @@ sha2 = "0.10"
 
 # Error handling
 thiserror = "2"
+trait-variant = "0.1"
 anyhow = "1"
 tempfile = "3"
 
