@@ -1,4 +1,5 @@
 pub mod app;
+pub mod eagent;
 pub mod git;
 pub mod orchestration;
 pub mod projects;

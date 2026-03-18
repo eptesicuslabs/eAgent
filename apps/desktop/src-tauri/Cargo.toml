@@ -12,6 +12,8 @@ tauri-build = { version = "2.1.0", features = [] }
 
 [dependencies]
 anyhow = { workspace = true }
+eagent-planner = { workspace = true }
+eagent-protocol = { workspace = true }
 ecode-contracts = { workspace = true }
 ecode-core = { workspace = true }
 ecode-desktop-app = { workspace = true }

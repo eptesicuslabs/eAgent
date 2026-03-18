@@ -70,7 +70,12 @@ fn run() -> Result<()> {
             commands::projects::projects_search_entries,
             commands::projects::projects_write_file,
             commands::settings::settings_get,
-            commands::settings::settings_save
+            commands::settings::settings_save,
+            commands::eagent::eagent_submit_task,
+            commands::eagent::eagent_cancel_graph,
+            commands::eagent::eagent_get_providers,
+            commands::eagent::eagent_approve_oversight,
+            commands::eagent::eagent_deny_oversight
         ])
         .run(tauri::generate_context!())?;
 
