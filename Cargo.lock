@@ -1173,6 +1173,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "eagent-providers"
+version = "0.1.0"
+dependencies = [
+ "eagent-contracts",
+ "eagent-protocol",
+ "eagent-tools",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "trait-variant",
+]
+
+[[package]]
 name = "eagent-tools"
 version = "0.1.0"
 dependencies = [

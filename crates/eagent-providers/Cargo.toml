@@ -1,0 +1,17 @@
+[package]
+name = "eagent-providers"
+description = "Provider trait, registry, and backend implementations for eAgent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+eagent-protocol = { workspace = true }
+eagent-contracts = { workspace = true }
+eagent-tools = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+trait-variant = { workspace = true }
