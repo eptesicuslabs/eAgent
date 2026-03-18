@@ -3,16 +3,17 @@
 
 use crate::ProviderError;
 use eagent_contracts::provider::{FinishReason, ProviderEvent};
+use futures_util::StreamExt;
 use serde_json::Value;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 use tracing::warn;
 
-/// Read a complete SSE response body and emit [`ProviderEvent`]s through the
-/// channel.
+/// Read an SSE response body as a true byte stream and emit [`ProviderEvent`]s
+/// through the channel as data arrives.
 ///
-/// The response is consumed in full and then each `data:` line is parsed
-/// individually.  `data: [DONE]` marks the end of the stream.
+/// Each `data:` line is parsed individually.  `data: [DONE]` marks the end of
+/// the stream.
 pub async fn read_sse_stream(
     response: reqwest::Response,
     tx: &mpsc::UnboundedSender<ProviderEvent>,
@@ -22,26 +23,31 @@ pub async fn read_sse_stream(
     // Accumulate tool call state across deltas.
     let mut tool_calls: HashMap<String, (String, String)> = HashMap::new();
 
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| ProviderError::Internal(format!("failed to read response body: {e}")))?;
-    buffer.push_str(&String::from_utf8_lossy(&bytes));
+    let mut stream = response.bytes_stream();
 
-    for line in buffer.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with(':') {
-            continue;
-        }
-        if line == "data: [DONE]" {
-            let _ = tx.send(ProviderEvent::Completion {
-                finish_reason: FinishReason::Stop,
-            });
-            return Ok(());
-        }
-        if let Some(json_str) = line.strip_prefix("data: ") {
-            if let Err(e) = parse_sse_data(json_str, tx, &mut tool_calls) {
-                warn!(target: "eagent::sse", "failed to parse SSE data: {e}");
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk
+            .map_err(|e| ProviderError::Internal(format!("failed to read response chunk: {e}")))?;
+        buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+        // Process all complete lines in the buffer
+        while let Some(newline_pos) = buffer.find('\n') {
+            let line = buffer[..newline_pos].trim().to_string();
+            buffer = buffer[newline_pos + 1..].to_string();
+
+            if line.is_empty() || line.starts_with(':') {
+                continue;
+            }
+            if line == "data: [DONE]" {
+                let _ = tx.send(ProviderEvent::Completion {
+                    finish_reason: FinishReason::Stop,
+                });
+                return Ok(());
+            }
+            if let Some(json_str) = line.strip_prefix("data: ") {
+                if let Err(e) = parse_sse_data(json_str, tx, &mut tool_calls) {
+                    warn!(target: "eagent::sse", "failed to parse SSE data: {e}");
+                }
             }
         }
     }

@@ -278,10 +278,11 @@ impl Provider for ApiKeyProvider {
 
     fn session_status(&self, _session: &SessionHandle) -> ProviderSessionStatus {
         // Stateless provider — always ready unless mid-stream.
+        // If the mutex is locked, the provider is actively running.
         self.status
             .try_lock()
             .map(|s| *s)
-            .unwrap_or(ProviderSessionStatus::Ready)
+            .unwrap_or(ProviderSessionStatus::Running)
     }
 }
 

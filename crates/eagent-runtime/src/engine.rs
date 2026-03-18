@@ -46,6 +46,12 @@ pub enum RuntimeEvent {
         task_id: TaskId,
         error: String,
     },
+    ToolResult {
+        graph_id: TaskGraphId,
+        task_id: TaskId,
+        tool_name: String,
+        result: eagent_tools::ToolResult,
+    },
     GraphCompleted {
         graph_id: TaskGraphId,
     },
@@ -85,6 +91,8 @@ pub struct RuntimeEngine {
     config: RuntimeConfig,
     /// Agent context shared with all spawned agents.
     agent_ctx: AgentContext,
+    /// Tool registry for executing tool calls from agents.
+    tool_registry: Arc<ToolRegistry>,
     /// Receivers for in-flight agent message streams, keyed by (graph_id, task_id).
     agent_receivers: Arc<RwLock<HashMap<(TaskGraphId, TaskId), mpsc::UnboundedReceiver<AgentMessage>>>>,
 }
@@ -101,7 +109,7 @@ impl RuntimeEngine {
     ) -> (Self, mpsc::UnboundedReceiver<RuntimeEvent>) {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let scheduler = Scheduler::new(config.max_concurrency);
-        let agent_pool = AgentPool::new(providers, tools);
+        let agent_pool = AgentPool::new(providers, tools.clone());
 
         let engine = Self {
             scheduler,
@@ -112,6 +120,7 @@ impl RuntimeEngine {
             event_tx,
             config,
             agent_ctx,
+            tool_registry: tools,
             agent_receivers: Arc::new(RwLock::new(HashMap::new())),
         };
 
@@ -302,7 +311,7 @@ impl RuntimeEngine {
         // Determine which provider to use
         let provider_name = task_node
             .assigned_provider
-            .map(|_| self.config.default_provider.clone())
+            .map(|id| id.to_string())
             .unwrap_or_else(|| self.config.default_provider.clone());
 
         // Spawn the agent
@@ -473,8 +482,70 @@ impl RuntimeEngine {
                         completed_keys.push(key);
                         tracing::info!(?graph_id, ?task_id, "task failed");
                     }
+                    AgentMessage::ToolRequest { task_id: tid, request_id, tool_name, params } => {
+                        let tid = *tid;
+                        let request_id = request_id.clone();
+                        let tool_name = tool_name.clone();
+                        let params = params.clone();
+
+                        // Forward the request to the UI for visibility
+                        let _ = self.event_tx.send(RuntimeEvent::AgentMessage {
+                            graph_id,
+                            task_id: tid,
+                            message: AgentMessage::ToolRequest {
+                                task_id: tid,
+                                request_id: request_id.clone(),
+                                tool_name: tool_name.clone(),
+                                params: params.clone(),
+                            },
+                        });
+
+                        // Execute the tool
+                        if let Some(tool) = self.tool_registry.get(&tool_name) {
+                            let ctx = eagent_tools::ToolContext {
+                                workspace_root: self.agent_ctx.workspace_root.clone(),
+                                agent_id: eagent_protocol::ids::AgentId::new(),
+                                task_id: tid,
+                                services: None,
+                            };
+                            match tool.execute(params, &ctx).await {
+                                Ok(result) => {
+                                    tracing::debug!(?graph_id, task_id = ?tid, tool = %tool_name, "tool executed successfully");
+                                    let _ = self.event_tx.send(RuntimeEvent::ToolResult {
+                                        graph_id,
+                                        task_id: tid,
+                                        tool_name,
+                                        result,
+                                    });
+                                }
+                                Err(e) => {
+                                    tracing::warn!(?graph_id, task_id = ?tid, tool = %tool_name, err = %e, "tool execution failed");
+                                    let _ = self.event_tx.send(RuntimeEvent::ToolResult {
+                                        graph_id,
+                                        task_id: tid,
+                                        tool_name,
+                                        result: eagent_tools::ToolResult {
+                                            output: serde_json::json!({"error": e.to_string()}),
+                                            is_error: true,
+                                        },
+                                    });
+                                }
+                            }
+                        } else {
+                            tracing::warn!(?graph_id, task_id = ?tid, tool = %tool_name, "tool not found in registry");
+                            let _ = self.event_tx.send(RuntimeEvent::ToolResult {
+                                graph_id,
+                                task_id: tid,
+                                tool_name: tool_name.clone(),
+                                result: eagent_tools::ToolResult {
+                                    output: serde_json::json!({"error": format!("tool '{}' not found", tool_name)}),
+                                    is_error: true,
+                                },
+                            });
+                        }
+                    }
                     _ => {
-                        // Forward all other messages (StatusUpdate, ToolRequest, etc.)
+                        // Forward all other messages (StatusUpdate, etc.)
                         let _ = self.event_tx.send(RuntimeEvent::AgentMessage {
                             graph_id,
                             task_id,

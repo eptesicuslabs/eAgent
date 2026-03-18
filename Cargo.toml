@@ -52,7 +52,8 @@ pulldown-cmark = "0.12"
 
 # Async
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+futures-util = "0.3"
 
 # Process
 shared_child = "1"

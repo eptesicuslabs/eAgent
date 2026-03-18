@@ -131,12 +131,17 @@ fn should_skip_entry(name: &str) -> bool {
 }
 
 /// Truncate output to `max_bytes`, appending a truncation notice.
-fn limit_output(mut text: String, max_bytes: usize) -> String {
-    if text.len() > max_bytes {
-        text.truncate(max_bytes);
-        text.push_str("\n...<truncated>");
+/// Uses `is_char_boundary` to avoid panicking on multi-byte UTF-8 characters.
+fn limit_output(text: String, max_bytes: usize) -> String {
+    if text.len() <= max_bytes {
+        return text;
     }
-    text
+    // Find the nearest char boundary at or before max_bytes
+    let mut end = max_bytes;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}...\n[output truncated]", &text[..end])
 }
 
 /// Extract a required string field from a JSON value.
