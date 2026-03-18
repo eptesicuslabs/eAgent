@@ -1,8 +1,9 @@
 //! LlamaCpp provider — manages a local llama-server process and speaks
 //! the OpenAI-compatible `/v1/chat/completions` SSE protocol.
 
+use crate::sse::read_sse_stream;
 use crate::{Provider, ProviderError, ProviderMessage, ProviderMessageRole, SessionConfig, SessionHandle};
-use eagent_contracts::provider::{FinishReason, ModelInfo, ProviderEvent, ProviderKind, ProviderSessionStatus};
+use eagent_contracts::provider::{ModelInfo, ProviderEvent, ProviderKind, ProviderSessionStatus};
 use eagent_tools::ToolDef;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -408,144 +409,14 @@ impl Provider for LlamaCppProvider {
 }
 
 // ---------------------------------------------------------------------------
-// SSE stream reader
-// ---------------------------------------------------------------------------
-
-/// Read an SSE response body and emit `ProviderEvent`s through the channel.
-async fn read_sse_stream(
-    response: reqwest::Response,
-    tx: &mpsc::UnboundedSender<ProviderEvent>,
-) -> Result<(), ProviderError> {
-    // Buffer for partial data across chunks.
-    let mut buffer = String::new();
-
-    // Accumulate tool call state across deltas.
-    let mut tool_calls: std::collections::HashMap<String, (String, String)> =
-        std::collections::HashMap::new();
-
-    // Read the body in chunks (no `stream` feature required).
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| ProviderError::Internal(format!("failed to read response body: {e}")))?;
-    buffer.push_str(&String::from_utf8_lossy(&bytes));
-
-    for line in buffer.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with(':') {
-            continue;
-        }
-        if line == "data: [DONE]" {
-            let _ = tx.send(ProviderEvent::Completion {
-                finish_reason: FinishReason::Stop,
-            });
-            return Ok(());
-        }
-        if let Some(json_str) = line.strip_prefix("data: ") {
-            if let Err(e) = parse_sse_data(json_str, tx, &mut tool_calls) {
-                warn!(target: "eagent::llama_cpp", "failed to parse SSE data: {e}");
-            }
-        }
-    }
-
-    // If we get here without [DONE], still send a completion event.
-    let _ = tx.send(ProviderEvent::Completion {
-        finish_reason: FinishReason::Stop,
-    });
-    Ok(())
-}
-
-/// Parse a single SSE `data:` JSON payload and emit events.
-fn parse_sse_data(
-    json_str: &str,
-    tx: &mpsc::UnboundedSender<ProviderEvent>,
-    tool_calls: &mut std::collections::HashMap<String, (String, String)>,
-) -> Result<(), String> {
-    let v: Value = serde_json::from_str(json_str).map_err(|e| e.to_string())?;
-
-    let choice = &v["choices"][0];
-    let delta = &choice["delta"];
-
-    // -- text token delta ---------------------------------------------------
-    if let Some(text) = delta["content"].as_str() {
-        if !text.is_empty() {
-            let _ = tx.send(ProviderEvent::TokenDelta {
-                text: text.to_string(),
-            });
-        }
-    }
-
-    // -- tool call deltas ---------------------------------------------------
-    if let Some(tcs) = delta["tool_calls"].as_array() {
-        for tc in tcs {
-            let idx = tc["index"].as_u64().unwrap_or(0);
-            let id = tc["id"]
-                .as_str()
-                .unwrap_or("")
-                .to_string();
-
-            let func = &tc["function"];
-            let name = func["name"].as_str().unwrap_or("").to_string();
-            let args_frag = func["arguments"].as_str().unwrap_or("").to_string();
-
-            // Derive a stable id: the server may send `id` only on the first
-            // delta for each tool call index, so fall back to "tc_{idx}".
-            let effective_id = if !id.is_empty() {
-                id.clone()
-            } else {
-                format!("tc_{idx}")
-            };
-
-            if let Some((_n, accumulated)) = tool_calls.get_mut(&effective_id) {
-                // Continuation delta.
-                accumulated.push_str(&args_frag);
-                let _ = tx.send(ProviderEvent::ToolCallDelta {
-                    id: effective_id.clone(),
-                    params_partial: args_frag,
-                });
-            } else {
-                // First time we see this tool call id.
-                tool_calls.insert(effective_id.clone(), (name.clone(), args_frag.clone()));
-                let _ = tx.send(ProviderEvent::ToolCallStart {
-                    id: effective_id.clone(),
-                    name: name.clone(),
-                    params_partial: args_frag,
-                });
-            }
-        }
-    }
-
-    // -- finish reason ------------------------------------------------------
-    if let Some(reason_str) = choice["finish_reason"].as_str() {
-        let finish_reason = match reason_str {
-            "stop" => FinishReason::Stop,
-            "tool_calls" => FinishReason::ToolCalls,
-            "length" => FinishReason::Length,
-            "content_filter" => FinishReason::ContentFilter,
-            _ => FinishReason::Stop,
-        };
-
-        // Emit ToolCallComplete for any accumulated tool calls when finish_reason is tool_calls.
-        if finish_reason == FinishReason::ToolCalls {
-            for (id, (name, args)) in tool_calls.drain() {
-                let params: Value = serde_json::from_str(&args).unwrap_or(Value::Null);
-                let _ = tx.send(ProviderEvent::ToolCallComplete { id, name, params });
-            }
-        }
-
-        let _ = tx.send(ProviderEvent::Completion { finish_reason });
-    }
-
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sse::parse_sse_data;
+    use eagent_contracts::provider::FinishReason;
 
     #[test]
     fn config_defaults() {

@@ -1,8 +1,10 @@
 //! eAgent Providers — trait and implementations for LLM backends.
 
+pub mod api_key;
 pub mod codex;
 pub mod llama_cpp;
 pub mod registry;
+pub mod sse;
 
 use eagent_contracts::provider::{ModelInfo, ProviderEvent, ProviderSessionStatus};
 use eagent_tools::ToolDef;
