@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "eCode",
+  "productName": "eAgent",
   "version": "0.1.0",
-  "identifier": "com.ecode.desktop",
+  "identifier": "com.eptesicus.eagent",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "eCode",
+        "title": "eAgent",
         "width": 1440,
         "height": 920,
         "minWidth": 1000,
@@ -27,6 +27,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all"
+    "targets": "all",
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ]
   }
 }
