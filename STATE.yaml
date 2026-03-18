@@ -1,25 +1,37 @@
-project: eCode
-date: 2026-03-17
+project: eAgent
+date: 2026-03-18
 status: in_progress
 current_focus:
-  - typed tauri thread-view/transcript/terminal/review DTO seam
-  - shared desktop runtime extraction
-  - codex/t3-inspired product shell rebuild on tauri/react
-  - local-agent and llama.cpp hardening for portable windows
-  - release build and launch verification
-decisions:
+  - phase 1 scaffolding complete — 10 new eagent-* crates with traits and protocol types
+  - phase 2 extract — migrate ecode-core providers, tools, persistence into eagent-* crates
+  - multi-agent orchestration design (TaskGraph scheduler, AgentPool, ConflictResolver)
+  - provider system expansion (ApiKeyProvider for generic OpenAI-compatible endpoints)
+  - UI rework for agent traces, plan view, diff review, multi-terminal
+architecture:
+  platform: eagent_protocol_first
+  workstations: ecode_and_ework
+  orchestration: planner_plus_parallel_workers
+  providers: codex_llamacpp_apikey
+  ecosystem: emcps_and_eskills
   ui_scope: tauri_react_desktop_shell
-  codex_role: primary_agent_provider
-  local_model_mode: managed_llama_server
-  local_model_scope: core_agent_loop_plus_web_search
-  codex_model_source: live_model_list_with_official_fallback
-  api_key_ui: hidden_until_product_requires_it
   backend_runtime: rust_core_preserved
-  desktop_controller: shared_toolkit_neutral_crate
+crate_structure:
+  protocol: eagent-protocol (wire format, AgentMessage, TaskGraph, Agent trait)
+  contracts: eagent-contracts (config, provider metadata, oversight model)
+  tools: eagent-tools (Tool trait, ToolRegistry)
+  providers: eagent-providers (Provider trait, ProviderRegistry)
+  persistence: eagent-persistence (shell — EventStore, config)
+  runtime: eagent-runtime (shell — scheduler, agent pool, conflict resolver)
+  planner: eagent-planner (shell — planner agent, TaskGraph generation)
+  skills: eagent-skills (shell — eSkill loader)
+  mcp: eagent-mcp (shell — eMCP client)
+  index: eagent-index (shell — project graph, symbol index)
+  legacy: ecode-contracts, ecode-core, ecode-desktop-app, ecode-gui (to be migrated/deleted)
 known_gaps:
-  - tauri shell builds again, but transcript, plan, diff, and terminal views are still derived heuristically from the raw read model instead of backend-owned typed DTOs
-  - terminal updates still rely on coarse full-snapshot refreshes and single-buffer terminal state rather than richer typed deltas
-  - old egui shell still exists and carries legacy lint debt
-  - right-side plan/diff panel is still a lightweight baseline, not full Codex/T3 parity
-  - local-provider approvals and request-user-input are not fully interactive yet
-  - duckduckgo html parsing is still a pragmatic v1 backend despite the new timeouts and host guards
+  - eagent-* crates are scaffolded with traits but no business logic yet
+  - existing ecode-core code needs migration into new crates (Phase 2)
+  - multi-agent orchestration not yet implemented (Phase 3)
+  - UI shell needs major rework for agent traces and parallel task views (Phase 5)
+  - eWork tools (documents, spreadsheets, presentations) not yet implemented (Phase 6)
+  - eMCP and eSkill loaders not yet implemented (Phase 7)
+  - project index / tree-sitter integration not yet implemented (Phase 8)

@@ -46,3 +46,17 @@
 - Restored the missing React chat shell subcomponents under `apps/desktop/src/components/chat/` and corrected the terminal drawer to use the installed `@xterm/xterm` package import path so the Tauri UI builds again.
 - Re-ran verification: `cargo test -p ecode-desktop-app --lib`, `cargo check -p ecode-desktop-app`, `npm run build`, and full `cargo test` all passed.
 - Retried Trivy filesystem scans at the repo root and `apps/desktop`; both still fail at the MCP layer with `failed to scan project`, so security scan results remain unavailable.
+
+## 2026-03-18
+- Renamed project direction from eCode to **eAgent** — an agentic engineering platform by Eptesicus Laboratories.
+- eAgent brand hierarchy: eAgent (platform), eCode (coding), eWork (general-purpose), eMCPs (connectors), eSkills (capabilities).
+- Created design spec at `docs/superpowers/specs/2026-03-18-eagent-platform-design.md` covering protocol-first architecture, multi-agent parallel orchestration, eMCPs, eSkills, and 10 implementation phases.
+- Phase 1 Scaffolding complete — created 10 new crates:
+  - `eagent-protocol`: AgentMessage (7 variants), HarnessMessage (5 variants), TaskGraph, TaskNode, TaskStatus, TraceEntry, TaskGraphEvent (13 variants), Agent trait with AgentChannel.
+  - `eagent-contracts`: AgentConfig (multi-provider), ProviderKind (Codex/LlamaCpp/ApiKey), ProviderEvent, OversightMode (three-tier: FullAutonomy/ApproveRisky/ApproveAll).
+  - `eagent-tools`: Tool trait (dyn-compatible async), ToolRegistry, ToolContext, ToolDef.
+  - `eagent-providers`: Provider trait (dyn-compatible async), ProviderRegistry, SessionHandle.
+  - `eagent-persistence`, `eagent-runtime`, `eagent-planner`, `eagent-skills`, `eagent-mcp`, `eagent-index`: shell crates for future phases.
+- Switched to GNU toolchain (`rust-toolchain.toml`) to avoid POSIX link.exe shadowing MSVC linker.
+- Installed MinGW-w64 (WinLibs) via winget for the GNU toolchain.
+- All 55 tests pass across the full workspace (existing + new crates).
