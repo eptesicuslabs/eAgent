@@ -40,7 +40,7 @@ const SKIPPED_DIRS: &[&str] = &[
 /// 2. Path does not exist but parent does — canonicalize parent + file name.
 /// 3. Deeply non-existent path (e.g. `sub/deep/file.txt` where `sub` doesn't
 ///    exist) — normalize logically and verify containment.
-fn resolve_path(workspace_root: &str, path: &str) -> Result<PathBuf, ToolError> {
+pub(crate) fn resolve_path(workspace_root: &str, path: &str) -> Result<PathBuf, ToolError> {
     let root = PathBuf::from(workspace_root);
     let canon_root = root
         .canonicalize()
@@ -140,7 +140,7 @@ fn limit_output(mut text: String, max_bytes: usize) -> String {
 }
 
 /// Extract a required string field from a JSON value.
-fn required_str<'a>(params: &'a Value, key: &str) -> Result<&'a str, ToolError> {
+pub(crate) fn required_str<'a>(params: &'a Value, key: &str) -> Result<&'a str, ToolError> {
     params
         .get(key)
         .and_then(Value::as_str)

@@ -1,5 +1,6 @@
 //! eAgent Tools — trait definition and built-in tool implementations.
 
+pub mod documents;
 pub mod filesystem;
 pub mod git;
 pub mod registry;
@@ -141,6 +142,11 @@ pub fn register_builtin_tools(registry: &mut registry::ToolRegistry) {
     // Terminal tools
     registry.register(Arc::new(terminal::CreateTerminalTool));
     registry.register(Arc::new(terminal::TerminalWriteTool));
+    // Document tools (eWork)
+    registry.register(Arc::new(documents::CreateDocumentTool));
+    registry.register(Arc::new(documents::SummarizeTool));
+    registry.register(Arc::new(documents::ReadPdfTool));
+    registry.register(Arc::new(documents::ResearchTool));
 }
 
 #[cfg(test)]
