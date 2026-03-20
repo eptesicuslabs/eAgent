@@ -6,12 +6,16 @@ use eagent_protocol::traits::AgentContext;
 use eagent_providers::registry::ProviderRegistry;
 use eagent_providers::{ProviderMessage, ProviderMessageRole, SessionConfig};
 use eagent_tools::registry::ToolRegistry;
+use eagent_tools::ToolContext;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, oneshot};
 use tracing;
 
 use crate::error::RuntimeError;
+
+/// Maximum number of tool-call rounds before the agent is forced to stop.
+const MAX_TOOL_ROUNDS: usize = 20;
 
 /// Handle to a running agent, used for lifecycle management.
 pub struct AgentHandle {
@@ -42,13 +46,9 @@ impl AgentPool {
     /// `AgentMessage`s as the agent progresses, ending with `TaskComplete` or
     /// `TaskFailed`.
     ///
-    /// The method:
-    /// 1. Gets the provider from the registry
-    /// 2. Creates a session with the provider
-    /// 3. Builds the system prompt + messages from the task description
-    /// 4. Calls provider.send() to start streaming
-    /// 5. Spawns a tokio task that reads ProviderEvents and translates them to AgentMessages
-    /// 6. Returns the AgentMessage receiver
+    /// The agent runs a full **agentic tool loop**: it calls the provider,
+    /// processes tool call requests by executing them locally, feeds the results
+    /// back to the provider, and repeats until the LLM signals completion.
     pub async fn spawn_agent(
         &self,
         task: &TaskNode,
@@ -64,12 +64,13 @@ impl AgentPool {
         let task_id = task.id;
         let agent_id = AgentId::new();
         let description = task.description.clone();
+        let tools = self.tools.clone();
 
         // Build tool defs for the allowed tools
         let tool_defs = if task.tools_allowed.is_empty() {
-            self.tools.list_defs()
+            tools.list_defs()
         } else {
-            self.tools.list_defs_filtered(&task.tools_allowed)
+            tools.list_defs_filtered(&task.tools_allowed)
         };
 
         // Build system prompt
@@ -77,7 +78,9 @@ impl AgentPool {
             "You are an AI agent working on a sub-task.\n\
              Workspace: {}\n\
              Project: {}\n\n\
-             Your task: {}",
+             Your task: {}\n\n\
+             Use the available tools to complete this task. Read files to understand \
+             the codebase, make edits, run commands, and verify your work.",
             ctx.workspace_root,
             ctx.project_name.as_deref().unwrap_or("unknown"),
             description,
@@ -87,7 +90,7 @@ impl AgentPool {
         let session = provider
             .create_session(SessionConfig {
                 model: String::new(), // use provider default
-                system_prompt: Some(system_prompt),
+                system_prompt: Some(system_prompt.clone()),
                 workspace_root: Some(ctx.workspace_root.clone()),
             })
             .await
@@ -96,26 +99,11 @@ impl AgentPool {
                 message: format!("session creation failed: {e}"),
             })?;
 
-        // Build messages
-        let messages = vec![ProviderMessage {
-            role: ProviderMessageRole::User,
-            content: description.clone(),
-        }];
-
-        // Send to provider and get the event receiver
-        let mut event_rx = provider
-            .send(&session, messages, tool_defs)
-            .await
-            .map_err(|e| RuntimeError::AgentSpawnFailed {
-                task_id,
-                message: format!("provider send failed: {e}"),
-            })?;
-
         // Create the agent message channel
         let (agent_tx, agent_rx) = mpsc::unbounded_channel::<AgentMessage>();
 
         // Create cancellation channel
-        let (cancel_tx, mut cancel_rx) = oneshot::channel::<()>();
+        let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
 
         // Register the agent handle
         {
@@ -132,92 +120,50 @@ impl AgentPool {
 
         let active_agents = self.active_agents.clone();
 
-        // Spawn a background task that translates ProviderEvents into AgentMessages
+        // Spawn the agentic tool loop
         tokio::spawn(async move {
-            let mut accumulated_text = String::new();
+            let result = run_agent_loop(
+                task_id,
+                agent_id,
+                &provider,
+                &session,
+                &tools,
+                &tool_defs,
+                &ctx,
+                &system_prompt,
+                &description,
+                &agent_tx,
+                cancel_rx,
+            )
+            .await;
 
-            loop {
-                tokio::select! {
-                    // Check for cancellation
-                    _ = &mut cancel_rx => {
-                        let _ = agent_tx.send(AgentMessage::TaskFailed {
-                            task_id,
-                            error: "cancelled".into(),
-                            partial_results: None,
-                        });
-                        break;
-                    }
-                    // Read provider events
-                    event = event_rx.recv() => {
-                        match event {
-                            Some(provider_event) => {
-                                match provider_event {
-                                    ProviderEvent::TokenDelta { text } => {
-                                        accumulated_text.push_str(&text);
-                                        let _ = agent_tx.send(AgentMessage::StatusUpdate {
-                                            task_id,
-                                            phase: "generating".into(),
-                                            message: text,
-                                            progress: None,
-                                        });
-                                    }
-                                    ProviderEvent::ToolCallComplete { id, name, params } => {
-                                        let _ = agent_tx.send(AgentMessage::ToolRequest {
-                                            task_id,
-                                            request_id: id,
-                                            tool_name: name,
-                                            params,
-                                        });
-                                    }
-                                    ProviderEvent::ToolCallStart { .. }
-                                    | ProviderEvent::ToolCallDelta { .. } => {
-                                        // Intermediate streaming events; we wait for ToolCallComplete
-                                    }
-                                    ProviderEvent::Completion { .. } => {
-                                        let _ = agent_tx.send(AgentMessage::TaskComplete {
-                                            task_id,
-                                            result: serde_json::Value::String(accumulated_text.clone()),
-                                            artifacts: vec![],
-                                        });
-                                        // Normal completion — exit the loop
-                                        break;
-                                    }
-                                    ProviderEvent::Error { message } => {
-                                        let _ = agent_tx.send(AgentMessage::TaskFailed {
-                                            task_id,
-                                            error: message,
-                                            partial_results: if accumulated_text.is_empty() {
-                                                None
-                                            } else {
-                                                Some(serde_json::Value::String(accumulated_text.clone()))
-                                            },
-                                        });
-                                        break;
-                                    }
-                                }
-                            }
-                            None => {
-                                // Provider stream ended without a Completion event
-                                let _ = agent_tx.send(AgentMessage::TaskFailed {
-                                    task_id,
-                                    error: "provider stream ended unexpectedly".into(),
-                                    partial_results: if accumulated_text.is_empty() {
-                                        None
-                                    } else {
-                                        Some(serde_json::Value::String(accumulated_text.clone()))
-                                    },
-                                });
-                                break;
-                            }
-                        }
-                    }
+            match result {
+                Ok(text) => {
+                    let _ = agent_tx.send(AgentMessage::TaskComplete {
+                        task_id,
+                        result: serde_json::Value::String(text),
+                        artifacts: vec![],
+                    });
+                }
+                Err(AgentLoopError::Cancelled) => {
+                    let _ = agent_tx.send(AgentMessage::TaskFailed {
+                        task_id,
+                        error: "cancelled".into(),
+                        partial_results: None,
+                    });
+                }
+                Err(AgentLoopError::Failed(error, partial)) => {
+                    let _ = agent_tx.send(AgentMessage::TaskFailed {
+                        task_id,
+                        error,
+                        partial_results: partial.map(serde_json::Value::String),
+                    });
                 }
             }
 
             // Remove from active agents
             let mut agents = active_agents.lock().await;
             agents.remove(&task_id);
-
             tracing::debug!(?task_id, "agent worker task finished");
         });
 
@@ -243,9 +189,232 @@ impl AgentPool {
     }
 }
 
+// =============================================================================
+// Agentic tool loop
+// =============================================================================
+
+enum AgentLoopError {
+    Cancelled,
+    Failed(String, Option<String>),
+}
+
+/// Collected tool call from a single provider turn.
+struct PendingToolCall {
+    id: String,
+    name: String,
+    params: serde_json::Value,
+}
+
+/// Run the full agentic loop: provider call → tool execution → feed back → repeat.
+///
+/// Returns the accumulated assistant text on success.
+async fn run_agent_loop(
+    task_id: TaskId,
+    agent_id: AgentId,
+    provider: &Arc<dyn eagent_providers::Provider>,
+    session: &eagent_providers::SessionHandle,
+    tools: &Arc<ToolRegistry>,
+    tool_defs: &[eagent_tools::ToolDef],
+    ctx: &AgentContext,
+    system_prompt: &str,
+    description: &str,
+    agent_tx: &mpsc::UnboundedSender<AgentMessage>,
+    mut cancel_rx: oneshot::Receiver<()>,
+) -> Result<String, AgentLoopError> {
+    // Conversation history — accumulates across turns
+    let mut messages: Vec<ProviderMessage> = vec![
+        ProviderMessage {
+            role: ProviderMessageRole::System,
+            content: system_prompt.to_string(),
+            tool_call_id: None,
+            tool_calls: None,
+        },
+        ProviderMessage {
+            role: ProviderMessageRole::User,
+            content: description.to_string(),
+            tool_call_id: None,
+            tool_calls: None,
+        },
+    ];
+
+    let mut final_text = String::new();
+
+    for round in 0..MAX_TOOL_ROUNDS {
+        tracing::debug!(?task_id, round, "starting tool round");
+
+        // Call the provider
+        let mut event_rx = provider
+            .send(session, messages.clone(), tool_defs.to_vec())
+            .await
+            .map_err(|e| AgentLoopError::Failed(
+                format!("provider send failed: {e}"),
+                if final_text.is_empty() { None } else { Some(final_text.clone()) },
+            ))?;
+
+        // Collect this turn's output
+        let mut turn_text = String::new();
+        let mut pending_tool_calls: Vec<PendingToolCall> = Vec::new();
+        let mut completed = false;
+
+        loop {
+            tokio::select! {
+                _ = &mut cancel_rx => {
+                    return Err(AgentLoopError::Cancelled);
+                }
+                event = event_rx.recv() => {
+                    match event {
+                        Some(ProviderEvent::TokenDelta { text }) => {
+                            turn_text.push_str(&text);
+                            let _ = agent_tx.send(AgentMessage::StatusUpdate {
+                                task_id,
+                                phase: "generating".into(),
+                                message: text,
+                                progress: None,
+                            });
+                        }
+                        Some(ProviderEvent::ToolCallComplete { id, name, params }) => {
+                            let _ = agent_tx.send(AgentMessage::ToolRequest {
+                                task_id,
+                                request_id: id.clone(),
+                                tool_name: name.clone(),
+                                params: params.clone(),
+                            });
+                            pending_tool_calls.push(PendingToolCall { id, name, params });
+                        }
+                        Some(ProviderEvent::ToolCallStart { .. })
+                        | Some(ProviderEvent::ToolCallDelta { .. }) => {
+                            // Intermediate streaming; wait for ToolCallComplete
+                        }
+                        Some(ProviderEvent::Completion { .. }) => {
+                            completed = true;
+                            break;
+                        }
+                        Some(ProviderEvent::Error { message }) => {
+                            return Err(AgentLoopError::Failed(
+                                message,
+                                if final_text.is_empty() { None } else { Some(final_text.clone()) },
+                            ));
+                        }
+                        None => {
+                            return Err(AgentLoopError::Failed(
+                                "provider stream ended unexpectedly".into(),
+                                if final_text.is_empty() { None } else { Some(final_text.clone()) },
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        final_text.push_str(&turn_text);
+
+        if !completed {
+            return Err(AgentLoopError::Failed(
+                "provider did not complete".into(),
+                Some(final_text),
+            ));
+        }
+
+        // If there are no tool calls, the agent is done
+        if pending_tool_calls.is_empty() {
+            tracing::info!(?task_id, rounds = round + 1, "agent completed");
+            return Ok(final_text);
+        }
+
+        // Execute tool calls and build the next turn's messages
+        // First, add the assistant's response (text + tool calls) to history
+        let assistant_tool_calls: Vec<eagent_providers::ProviderToolCall> = pending_tool_calls
+            .iter()
+            .map(|tc| eagent_providers::ProviderToolCall {
+                id: tc.id.clone(),
+                name: tc.name.clone(),
+                arguments: tc.params.to_string(),
+            })
+            .collect();
+        messages.push(ProviderMessage {
+            role: ProviderMessageRole::Assistant,
+            content: turn_text,
+            tool_call_id: None,
+            tool_calls: Some(assistant_tool_calls),
+        });
+
+        // Execute each tool call and append results
+        for tool_call in &pending_tool_calls {
+            let tool_result = if let Some(tool) = tools.get(&tool_call.name) {
+                let tool_ctx = ToolContext {
+                    workspace_root: ctx.workspace_root.clone(),
+                    agent_id,
+                    task_id,
+                    services: None,
+                };
+                match tool.execute(tool_call.params.clone(), &tool_ctx).await {
+                    Ok(result) => {
+                        tracing::debug!(
+                            ?task_id, tool = %tool_call.name,
+                            "tool executed successfully"
+                        );
+                        result
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            ?task_id, tool = %tool_call.name, err = %e,
+                            "tool execution failed"
+                        );
+                        eagent_tools::ToolResult {
+                            output: serde_json::json!({"error": e.to_string()}),
+                            is_error: true,
+                        }
+                    }
+                }
+            } else {
+                tracing::warn!(?task_id, tool = %tool_call.name, "tool not found");
+                eagent_tools::ToolResult {
+                    output: serde_json::json!({"error": format!("tool '{}' not found", tool_call.name)}),
+                    is_error: true,
+                }
+            };
+
+            // Emit tool result to UI
+            let _ = agent_tx.send(AgentMessage::StatusUpdate {
+                task_id,
+                phase: "tool_result".into(),
+                message: format!(
+                    "{}: {}",
+                    tool_call.name,
+                    if tool_result.is_error { "error" } else { "ok" }
+                ),
+                progress: None,
+            });
+
+            // Append tool result to conversation for the next provider call
+            messages.push(ProviderMessage {
+                role: ProviderMessageRole::Tool,
+                content: tool_result.output.to_string(),
+                tool_call_id: Some(tool_call.id.clone()),
+                tool_calls: None,
+            });
+        }
+
+        tracing::debug!(
+            ?task_id,
+            round,
+            tool_calls = pending_tool_calls.len(),
+            "tool round complete, continuing"
+        );
+    }
+
+    // Hit the max rounds limit — treat as failure, not success
+    tracing::warn!(?task_id, MAX_TOOL_ROUNDS, "agent hit max tool rounds");
+    Err(AgentLoopError::Failed(
+        format!("exceeded max tool rounds ({MAX_TOOL_ROUNDS})"),
+        if final_text.is_empty() { None } else { Some(final_text) },
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use eagent_providers::registry::ProviderRegistry;
 
     #[test]
     fn agent_pool_creation() {

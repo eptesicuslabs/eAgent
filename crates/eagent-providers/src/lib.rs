@@ -50,6 +50,21 @@ pub enum ProviderError {
 pub struct ProviderMessage {
     pub role: ProviderMessageRole,
     pub content: String,
+    /// For `Tool` role: the ID of the tool call this message responds to.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    /// For `Assistant` role: tool calls the assistant wants to make.
+    /// Each entry is `{ id, name, arguments }` matching OpenAI's format.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ProviderToolCall>>,
+}
+
+/// A tool call requested by the assistant, stored in conversation history.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ProviderToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -124,6 +139,8 @@ mod tests {
         let msg = ProviderMessage {
             role: ProviderMessageRole::User,
             content: "hello".into(),
+            tool_call_id: None,
+            tool_calls: None,
         };
         let json = serde_json::to_value(&msg).unwrap();
         assert_eq!(json["role"], "user");

@@ -5,6 +5,11 @@ mod dto;
 mod events;
 
 use anyhow::Result;
+use eagent_persistence::EventStore;
+use eagent_providers::api_key::{ApiKeyConfig, ApiKeyProvider};
+use eagent_providers::registry::ProviderRegistry;
+use eagent_runtime::engine::{RuntimeConfig, RuntimeEngine};
+use eagent_tools::registry::ToolRegistry;
 use ecode_desktop_app::AppRuntime;
 use std::sync::Arc;
 use tauri::Manager;
@@ -14,6 +19,13 @@ use tracing_subscriber::{EnvFilter, fmt};
 pub struct DesktopShellState {
     _runtime: Arc<Runtime>,
     pub app: AppRuntime,
+}
+
+/// State for the new eAgent multi-agent runtime, managed alongside legacy state.
+pub struct EAgentState {
+    pub engine: Arc<RuntimeEngine>,
+    pub provider_registry: Arc<ProviderRegistry>,
+    pub tool_registry: Arc<ToolRegistry>,
 }
 
 fn init_logging() {
@@ -43,9 +55,91 @@ fn run() -> Result<()> {
             let runtime_state = desktop_runtime.state();
             events::emit_status_event(&app_handle, &runtime_state);
             app.manage(DesktopShellState {
-                _runtime: runtime,
+                _runtime: runtime.clone(),
                 app: desktop_runtime,
             });
+
+            // ----- eAgent runtime setup -----
+            let event_store =
+                Arc::new(EventStore::in_memory().expect("failed to create event store"));
+
+            let mut tool_registry = ToolRegistry::new();
+            eagent_tools::register_builtin_tools(&mut tool_registry);
+            let tool_registry = Arc::new(tool_registry);
+
+            let mut provider_registry = ProviderRegistry::new();
+
+            // Register ApiKeyProvider from environment variables if set
+            if let Ok(api_key) = std::env::var("EAGENT_API_KEY") {
+                let endpoint = std::env::var("EAGENT_API_ENDPOINT")
+                    .unwrap_or_else(|_| "https://api.openai.com/v1".into());
+                let model = std::env::var("EAGENT_MODEL")
+                    .unwrap_or_else(|_| "gpt-4o".into());
+                let config = ApiKeyConfig {
+                    endpoint,
+                    api_key,
+                    default_model: model,
+                    ..Default::default()
+                };
+                provider_registry.register(
+                    "api-key".into(),
+                    Arc::new(ApiKeyProvider::new(config)),
+                );
+                tracing::info!("registered ApiKeyProvider from environment");
+            }
+
+            let provider_registry = Arc::new(provider_registry);
+
+            let agent_ctx = eagent_protocol::traits::AgentContext {
+                workspace_root: runtime_state
+                    .current_project
+                    .read()
+                    .unwrap()
+                    .clone()
+                    .unwrap_or_else(|| {
+                        std::env::current_dir()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or_else(|_| "/".into())
+                    }),
+                project_name: None,
+                project_summary: None,
+            };
+
+            let rt_config = RuntimeConfig {
+                default_provider: "api-key".into(),
+                ..Default::default()
+            };
+
+            let (engine, event_rx) = RuntimeEngine::new(
+                provider_registry.clone(),
+                tool_registry.clone(),
+                event_store,
+                rt_config,
+                agent_ctx,
+            );
+            let engine = Arc::new(engine);
+
+            // Spawn the scheduling loop
+            let engine_for_run = engine.clone();
+            runtime.spawn(async move { engine_for_run.run().await });
+
+            // Spawn the event bridge (RuntimeEvent → Tauri events)
+            let engine_for_bridge = engine.clone();
+            let app_handle_for_bridge = app_handle.clone();
+            runtime.spawn(events::eagent_event_bridge(
+                event_rx,
+                engine_for_bridge,
+                app_handle_for_bridge,
+            ));
+
+            app.manage(EAgentState {
+                engine,
+                provider_registry,
+                tool_registry,
+            });
+
+            tracing::info!("eAgent runtime initialized");
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -84,15 +84,42 @@ impl ApiKeyProvider {
         messages
             .iter()
             .map(|m| {
-                json!({
-                    "role": match m.role {
-                        ProviderMessageRole::System => "system",
-                        ProviderMessageRole::User => "user",
-                        ProviderMessageRole::Assistant => "assistant",
-                        ProviderMessageRole::Tool => "tool",
-                    },
+                let role = match m.role {
+                    ProviderMessageRole::System => "system",
+                    ProviderMessageRole::User => "user",
+                    ProviderMessageRole::Assistant => "assistant",
+                    ProviderMessageRole::Tool => "tool",
+                };
+
+                let mut msg = json!({
+                    "role": role,
                     "content": m.content,
-                })
+                });
+
+                // Tool result messages need tool_call_id at top level
+                if let Some(ref tool_call_id) = m.tool_call_id {
+                    msg["tool_call_id"] = Value::String(tool_call_id.clone());
+                }
+
+                // Assistant messages with tool calls need the tool_calls array
+                if let Some(ref tool_calls) = m.tool_calls {
+                    let calls: Vec<Value> = tool_calls
+                        .iter()
+                        .map(|tc| {
+                            json!({
+                                "id": tc.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tc.name,
+                                    "arguments": tc.arguments,
+                                }
+                            })
+                        })
+                        .collect();
+                    msg["tool_calls"] = Value::Array(calls);
+                }
+
+                msg
             })
             .collect()
     }
@@ -332,18 +359,26 @@ mod tests {
             ProviderMessage {
                 role: ProviderMessageRole::System,
                 content: "You are helpful.".into(),
+                tool_call_id: None,
+                tool_calls: None,
             },
             ProviderMessage {
                 role: ProviderMessageRole::User,
                 content: "Hello".into(),
+                tool_call_id: None,
+                tool_calls: None,
             },
             ProviderMessage {
                 role: ProviderMessageRole::Assistant,
                 content: "Hi there!".into(),
+                tool_call_id: None,
+                tool_calls: None,
             },
             ProviderMessage {
                 role: ProviderMessageRole::Tool,
                 content: r#"{"result":"ok"}"#.into(),
+                tool_call_id: Some("call_123".into()),
+                tool_calls: None,
             },
         ];
         let payload = ApiKeyProvider::build_messages_payload(&msgs);

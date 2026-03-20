@@ -84,3 +84,33 @@
 - Added SimplePlanner for single-task graph creation and 5 Tauri eAgent commands (submit, cancel, providers, oversight).
 - Fixed critical self-critique issues: tool execution loop in RuntimeEngine, provider routing bug, SSE true streaming, UTF-8 safety in limit_output, session_status fallback.
 - Final state: 292 tests passing, React build clean, 28 commits on master.
+
+## 2026-03-20
+- Conducted strategic brainstorm for eAgent platform direction: recursive agents, conversational+dashboard UI, all providers day one, bundled eMCPs/eSkills, Foundation First implementation strategy.
+- Wrote design spec at `docs/superpowers/specs/2026-03-20-eagent-foundation-first-design.md`.
+- **Phase 1 — Wire the Loop**: Connected eagent-runtime to Tauri shell end-to-end.
+  - Added eagent-runtime, eagent-providers, eagent-tools, eagent-persistence, eagent-contracts as Tauri dependencies.
+  - Created `EAgentState` in main.rs: instantiates EventStore, ToolRegistry (16 builtin tools), ProviderRegistry (ApiKeyProvider from env vars), RuntimeEngine. Spawns scheduling loop + event bridge.
+  - Added eAgent event DTOs in dto.rs: `EAgentTaskGraphUpdatePayload`, `EAgentTaskNodePayload`, `EAgentAgentTracePayload`, `EAgentTraceEntryPayload` + `task_graph_to_update_payload()` conversion.
+  - Added `eagent_event_bridge()` in events.rs: async loop translating RuntimeEvents into Tauri events (`eagent://task-graph-update`, `eagent://agent-trace`).
+  - Wired all 5 eagent Tauri commands to real RuntimeEngine: submit (via planner + engine.submit()), cancel, get_providers, approve, deny.
+  - Frontend event bridge already set up from prior work — zero React changes needed.
+- **Phase 2 partial — Legacy cleanup**:
+  - Deleted `crates/ecode-gui/` (dead code, zero references).
+  - Audited ecode-core, ecode-desktop-app, ecode-contracts for migration readiness. Key finding: legacy crates stay for now — they power the existing chat UI (thread/turn model). eagent-runtime handles the new multi-agent flow. The two systems coexist without cross-dependencies.
+- **Phase 3 — LLM-powered planner**:
+  - Created `LlmPlanner` in `crates/eagent-planner/src/llm.rs`: calls a provider with a planner system prompt, receives JSON task decomposition, parses into TaskGraph DAG.
+  - Handles markdown code blocks in LLM responses, unknown dependencies, empty tool lists (defaults to common set).
+  - Falls back to SimplePlanner if LLM response can't be parsed.
+  - Wired into Tauri: `eagent_submit_task` uses LlmPlanner when provider available, SimplePlanner otherwise.
+  - 10 new tests covering JSON parsing, dependency edges, code block extraction, fallback behavior.
+- **Critical fix — Agentic tool loop**: Rewrote `AgentPool::spawn_agent` with a full multi-turn tool loop. Previously agents did a single provider call; now they: call provider → collect tool requests → execute tools locally → feed results back → call provider again → repeat up to 20 rounds. Moved tool execution from RuntimeEngine into the agent worker task. Engine now just relays messages to UI.
+- **Protocol fix — ProviderMessage tool fields**: Extended `ProviderMessage` with `tool_call_id` (for tool results) and `tool_calls` (for assistant messages with function calls). Updated `ApiKeyProvider::build_messages_payload()` to emit correct OpenAI format: tool messages include top-level `tool_call_id`, assistant messages include `tool_calls` array with `id`, `type: "function"`, `function: {name, arguments}`. Without this, multi-turn tool conversations would be rejected by the API.
+- **UI — AgentTraceView component**: Created `AgentTraceView.tsx` React component that reads from the eAgent store and renders task nodes with status icons, color-coded trace entries (thinking/tool-call/tool-result/error/status), expandable detail sections, and error display. Wired into `_chat.index.tsx` — shows the trace view when a graph is selected, welcome screen when not.
+- **Critical bug fixes from code review** (5 issues):
+  1. Max-round hit in agent loop now returns failure (was silently succeeding with truncated work).
+  2. `AwaitingReview` status included in active tasks check (was causing permanent deadlock).
+  3. Completed graphs evicted from `RuntimeEngine::graphs` (was emitting `GraphCompleted` every 100ms forever).
+  4. Task submission requires an open project (was defaulting to `"."` or `""`, breaking sandbox).
+  5. Removed `run_command` from planner defaults (not registered as a tool, was causing persistent LLM errors).
+- Current state: 302 tests passing, React build clean. Full end-to-end pipeline with UI: user prompt → LLM planner → TaskGraph DAG → RuntimeEngine → AgentPool → Provider → multi-turn tool loop → Tauri events → React store → AgentTraceView renders execution trace.

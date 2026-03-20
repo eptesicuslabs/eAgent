@@ -467,10 +467,14 @@ mod tests {
             ProviderMessage {
                 role: ProviderMessageRole::System,
                 content: "You are helpful.".into(),
+                tool_call_id: None,
+                tool_calls: None,
             },
             ProviderMessage {
                 role: ProviderMessageRole::User,
                 content: "Hello".into(),
+                tool_call_id: None,
+                tool_calls: None,
             },
         ];
         let payload = LlamaCppProvider::build_messages_payload(&msgs);

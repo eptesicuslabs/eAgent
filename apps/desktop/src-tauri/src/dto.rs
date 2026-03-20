@@ -295,3 +295,147 @@ pub fn parse_approval_id(value: &str) -> Result<ApprovalRequestId, String> {
 pub fn branch_list_payload(branches: Vec<BranchInfo>) -> Vec<BranchInfo> {
     branches
 }
+
+// =============================================================================
+// eAgent event DTOs — Rust → React via Tauri events
+// =============================================================================
+
+/// Full task graph snapshot sent to the React store.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EAgentTaskGraphUpdatePayload {
+    pub graph_id: String,
+    pub root_task_id: String,
+    pub user_prompt: String,
+    pub nodes: std::collections::HashMap<String, EAgentTaskNodePayload>,
+    pub edges: Vec<EAgentTaskEdgePayload>,
+    pub status: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EAgentTaskNodePayload {
+    pub id: String,
+    pub description: String,
+    pub status: String,
+    pub assigned_agent: Option<String>,
+    pub assigned_provider: Option<String>,
+    pub tools_allowed: Vec<String>,
+    pub error: Option<String>,
+    pub retries: u32,
+    pub cancel_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EAgentTaskEdgePayload {
+    pub from: String,
+    pub to: String,
+}
+
+/// Agent trace entry sent to the React store.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EAgentAgentTracePayload {
+    pub graph_id: String,
+    pub task_id: String,
+    pub agent_id: String,
+    pub entry: EAgentTraceEntryPayload,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EAgentTraceEntryPayload {
+    pub id: String,
+    pub kind: String,
+    pub agent_id: Option<String>,
+    pub timestamp: String,
+    pub summary: String,
+    pub detail: Option<String>,
+    pub tool_name: Option<String>,
+    pub file_path: Option<String>,
+}
+
+// --- Conversion functions ---
+
+use eagent_protocol::task_graph::{TaskGraph, TaskStatus};
+
+/// Convert a TaskGraph into the update payload the React store expects.
+pub fn task_graph_to_update_payload(graph: &TaskGraph) -> EAgentTaskGraphUpdatePayload {
+    let mut nodes = std::collections::HashMap::new();
+    for (id, node) in &graph.nodes {
+        let (status_str, error, retries, cancel_reason) = match &node.status {
+            TaskStatus::Pending => ("pending", None, 0, None),
+            TaskStatus::Ready => ("ready", None, 0, None),
+            TaskStatus::Scheduled => ("scheduled", None, 0, None),
+            TaskStatus::Running => ("running", None, 0, None),
+            TaskStatus::AwaitingReview => ("awaiting-review", None, 0, None),
+            TaskStatus::Complete => ("complete", None, 0, None),
+            TaskStatus::Failed { error, retries } => {
+                ("failed", Some(error.clone()), *retries, None)
+            }
+            TaskStatus::Cancelled { reason } => {
+                ("cancelled", None, 0, Some(reason.clone()))
+            }
+        };
+
+        nodes.insert(
+            id.to_string(),
+            EAgentTaskNodePayload {
+                id: id.to_string(),
+                description: node.description.clone(),
+                status: status_str.into(),
+                assigned_agent: node.assigned_agent.map(|a| a.to_string()),
+                assigned_provider: node.assigned_provider.map(|p| p.to_string()),
+                tools_allowed: node.tools_allowed.clone(),
+                error,
+                retries,
+                cancel_reason,
+            },
+        );
+    }
+
+    let edges: Vec<EAgentTaskEdgePayload> = graph
+        .edges
+        .iter()
+        .map(|(from, to)| EAgentTaskEdgePayload {
+            from: from.to_string(),
+            to: to.to_string(),
+        })
+        .collect();
+
+    // Derive overall graph status from node states
+    let has_running = graph.nodes.values().any(|n| {
+        matches!(
+            n.status,
+            TaskStatus::Running | TaskStatus::Scheduled
+        )
+    });
+    let has_failed = graph
+        .nodes
+        .values()
+        .any(|n| matches!(n.status, TaskStatus::Failed { .. }));
+    let all_complete = graph
+        .nodes
+        .values()
+        .all(|n| matches!(n.status, TaskStatus::Complete));
+
+    let status = if all_complete {
+        "complete"
+    } else if has_failed {
+        "failed"
+    } else if has_running {
+        "running"
+    } else {
+        "planning"
+    };
+
+    EAgentTaskGraphUpdatePayload {
+        graph_id: graph.id.to_string(),
+        root_task_id: graph.root_task_id.to_string(),
+        user_prompt: graph.user_prompt.clone(),
+        nodes,
+        edges,
+        status,
+    }
+}

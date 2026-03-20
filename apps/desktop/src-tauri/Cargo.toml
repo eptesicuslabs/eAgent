@@ -12,8 +12,14 @@ tauri-build = { version = "2.1.0", features = [] }
 
 [dependencies]
 anyhow = { workspace = true }
+chrono = { workspace = true }
+eagent-contracts = { workspace = true }
+eagent-persistence = { workspace = true }
 eagent-planner = { workspace = true }
 eagent-protocol = { workspace = true }
+eagent-providers = { workspace = true }
+eagent-runtime = { workspace = true }
+eagent-tools = { workspace = true }
 ecode-contracts = { workspace = true }
 ecode-core = { workspace = true }
 ecode-desktop-app = { workspace = true }
@@ -22,6 +28,7 @@ serde_json = { workspace = true }
 tauri = { version = "2.2.5", features = [] }
 tokio = { workspace = true }
 toml = { workspace = true }
+uuid = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 rfd = { workspace = true }

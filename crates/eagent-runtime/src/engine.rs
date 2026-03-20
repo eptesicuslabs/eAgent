@@ -175,6 +175,8 @@ impl RuntimeEngine {
                 graphs.keys().copied().collect()
             };
 
+            let mut completed_graph_ids = Vec::new();
+
             for graph_id in graph_ids {
                 // First, poll existing agent receivers for this graph
                 self.poll_agent_messages(graph_id).await;
@@ -191,6 +193,7 @@ impl RuntimeEngine {
                                     | TaskStatus::Ready
                                     | TaskStatus::Scheduled
                                     | TaskStatus::Running
+                                    | TaskStatus::AwaitingReview
                             )
                         });
 
@@ -198,7 +201,7 @@ impl RuntimeEngine {
                             any_active = true;
                             self.scheduler.next_tasks(graph)
                         } else {
-                            // Check if graph just completed
+                            // Check if graph just completed (all tasks terminal)
                             let all_terminal = graph.nodes.values().all(|n| {
                                 matches!(
                                     n.status,
@@ -208,7 +211,7 @@ impl RuntimeEngine {
                                 )
                             });
                             if all_terminal {
-                                self.complete_graph(graph_id).await;
+                                completed_graph_ids.push(graph_id);
                             }
                             vec![]
                         }
@@ -221,6 +224,11 @@ impl RuntimeEngine {
                 for task_id in tasks_to_schedule {
                     self.schedule_task(graph_id, task_id).await;
                 }
+            }
+
+            // Finalize completed graphs (outside read lock)
+            for graph_id in completed_graph_ids {
+                self.complete_graph(graph_id).await;
             }
 
             if !any_active {
@@ -482,69 +490,10 @@ impl RuntimeEngine {
                         completed_keys.push(key);
                         tracing::info!(?graph_id, ?task_id, "task failed");
                     }
-                    AgentMessage::ToolRequest { task_id: tid, request_id, tool_name, params } => {
-                        let tid = *tid;
-                        let request_id = request_id.clone();
-                        let tool_name = tool_name.clone();
-                        let params = params.clone();
-
-                        // Forward the request to the UI for visibility
-                        let _ = self.event_tx.send(RuntimeEvent::AgentMessage {
-                            graph_id,
-                            task_id: tid,
-                            message: AgentMessage::ToolRequest {
-                                task_id: tid,
-                                request_id: request_id.clone(),
-                                tool_name: tool_name.clone(),
-                                params: params.clone(),
-                            },
-                        });
-
-                        // Execute the tool
-                        if let Some(tool) = self.tool_registry.get(&tool_name) {
-                            let ctx = eagent_tools::ToolContext {
-                                workspace_root: self.agent_ctx.workspace_root.clone(),
-                                agent_id: eagent_protocol::ids::AgentId::new(),
-                                task_id: tid,
-                                services: None,
-                            };
-                            match tool.execute(params, &ctx).await {
-                                Ok(result) => {
-                                    tracing::debug!(?graph_id, task_id = ?tid, tool = %tool_name, "tool executed successfully");
-                                    let _ = self.event_tx.send(RuntimeEvent::ToolResult {
-                                        graph_id,
-                                        task_id: tid,
-                                        tool_name,
-                                        result,
-                                    });
-                                }
-                                Err(e) => {
-                                    tracing::warn!(?graph_id, task_id = ?tid, tool = %tool_name, err = %e, "tool execution failed");
-                                    let _ = self.event_tx.send(RuntimeEvent::ToolResult {
-                                        graph_id,
-                                        task_id: tid,
-                                        tool_name,
-                                        result: eagent_tools::ToolResult {
-                                            output: serde_json::json!({"error": e.to_string()}),
-                                            is_error: true,
-                                        },
-                                    });
-                                }
-                            }
-                        } else {
-                            tracing::warn!(?graph_id, task_id = ?tid, tool = %tool_name, "tool not found in registry");
-                            let _ = self.event_tx.send(RuntimeEvent::ToolResult {
-                                graph_id,
-                                task_id: tid,
-                                tool_name: tool_name.clone(),
-                                result: eagent_tools::ToolResult {
-                                    output: serde_json::json!({"error": format!("tool '{}' not found", tool_name)}),
-                                    is_error: true,
-                                },
-                            });
-                        }
-                    }
                     _ => {
+                        // Forward all messages (ToolRequest, StatusUpdate, etc.)
+                        // Tool execution is now handled inside the agent loop itself
+                        // (see agent_pool.rs::run_agent_loop), so we just relay to UI.
                         // Forward all other messages (StatusUpdate, etc.)
                         let _ = self.event_tx.send(RuntimeEvent::AgentMessage {
                             graph_id,
@@ -565,7 +514,7 @@ impl RuntimeEngine {
         }
     }
 
-    /// Mark a graph as completed and persist the event.
+    /// Mark a graph as completed, persist the event, and evict from active set.
     async fn complete_graph(&self, graph_id: TaskGraphId) {
         let _ = self.event_tx.send(RuntimeEvent::GraphCompleted { graph_id });
 
@@ -575,7 +524,13 @@ impl RuntimeEngine {
         })
         .ok();
 
-        tracing::info!(?graph_id, "task graph completed");
+        // Evict from active graphs so we don't re-process
+        {
+            let mut graphs = self.graphs.write().await;
+            graphs.remove(&graph_id);
+        }
+
+        tracing::info!(?graph_id, "task graph completed and evicted");
     }
 
     /// Persist a TaskGraphEvent to the event store.

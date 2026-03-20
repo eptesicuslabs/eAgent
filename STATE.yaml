@@ -1,37 +1,39 @@
 project: eAgent
-date: 2026-03-18
+date: 2026-03-20
 status: in_progress
 current_focus:
-  - phase 1 scaffolding complete — 10 new eagent-* crates with traits and protocol types
-  - phase 2 extract — migrate ecode-core providers, tools, persistence into eagent-* crates
-  - multi-agent orchestration design (TaskGraph scheduler, AgentPool, ConflictResolver)
-  - provider system expansion (ApiKeyProvider for generic OpenAI-compatible endpoints)
-  - UI rework for agent traces, plan view, diff review, multi-terminal
+  - Foundation First Phase 1 DONE — eagent-runtime wired to Tauri end-to-end
+  - Foundation First Phase 2 partial — ecode-gui deleted, legacy crates audited (keep for backward compat)
+  - Foundation First Phase 3 DONE — LLM-powered planner replaces SimplePlanner
+  - Next: Phase 4 (recursive agent spawning), Phase 5 (UI polish: conversational + dashboard)
 architecture:
   platform: eagent_protocol_first
-  workstations: ecode_and_ework
-  orchestration: planner_plus_parallel_workers
-  providers: codex_llamacpp_apikey
-  ecosystem: emcps_and_eskills
-  ui_scope: tauri_react_desktop_shell
+  workstations: ecode_and_ework (equal priority)
+  orchestration: recursive_agent_trees (any agent can spawn children)
+  providers: codex_llamacpp_apikey (all day one)
+  ecosystem: bundled_emcps_and_eskills (no marketplace)
+  ui_paradigm: conversational_plus_expanding_dashboard
   backend_runtime: rust_core_preserved
+  performance: core_brand_differentiator
+completed_phases:
+  - Phase 1 Wire the Loop — prompt → LLM planner → TaskGraph → RuntimeEngine → AgentPool → Provider → Tools → Tauri events → React store
+  - Phase 2a — deleted ecode-gui (dead code)
+  - Phase 3 — LlmPlanner with JSON task decomposition, code block extraction, dependency parsing, SimplePlanner fallback
 crate_structure:
   protocol: eagent-protocol (wire format, AgentMessage, TaskGraph, Agent trait)
   contracts: eagent-contracts (config, provider metadata, oversight model)
-  tools: eagent-tools (Tool trait, ToolRegistry)
-  providers: eagent-providers (Provider trait, ProviderRegistry)
-  persistence: eagent-persistence (shell — EventStore, config)
-  runtime: eagent-runtime (shell — scheduler, agent pool, conflict resolver)
-  planner: eagent-planner (shell — planner agent, TaskGraph generation)
-  skills: eagent-skills (shell — eSkill loader)
-  mcp: eagent-mcp (shell — eMCP client)
-  index: eagent-index (shell — project graph, symbol index)
-  legacy: ecode-contracts, ecode-core, ecode-desktop-app, ecode-gui (to be migrated/deleted)
-known_gaps:
-  - eagent-* crates are scaffolded with traits but no business logic yet
-  - existing ecode-core code needs migration into new crates (Phase 2)
-  - multi-agent orchestration not yet implemented (Phase 3)
-  - UI shell needs major rework for agent traces and parallel task views (Phase 5)
-  - eWork tools (documents, spreadsheets, presentations) not yet implemented (Phase 6)
-  - eMCP and eSkill loaders not yet implemented (Phase 7)
-  - project index / tree-sitter integration not yet implemented (Phase 8)
+  tools: eagent-tools (16 builtin tools, ToolRegistry)
+  providers: eagent-providers (ApiKey, LlamaCpp, Codex — Provider trait, ProviderRegistry)
+  persistence: eagent-persistence (EventStore SQLite, ConfigManager)
+  runtime: eagent-runtime (RuntimeEngine, Scheduler, AgentPool, ConflictResolver)
+  planner: eagent-planner (LlmPlanner + SimplePlanner fallback)
+  skills: eagent-skills (eSkill manifest parser/loader)
+  mcp: eagent-mcp (eMCP manifest parser/loader)
+  index: eagent-index (file tree index, language detection, project graph)
+  legacy: ecode-contracts, ecode-core, ecode-desktop-app (kept for backward compat — powers existing chat UI)
+test_count: 302
+next_phases:
+  - Phase 4: Recursive agent spawning (parent_task_id, dynamic graph growth, budget propagation)
+  - Phase 5: UI polish (conversational root agent, inline dashboard, expanded dashboard, setup wizard)
+  - Phase 6: eWork + ecosystem (document tools, bundled eMCPs/eSkills)
+  - Phase 7: Performance + polish (startup, throughput, secrets, tree-sitter)
