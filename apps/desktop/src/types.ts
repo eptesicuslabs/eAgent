@@ -526,11 +526,12 @@ export interface NativeApi {
   };
   // --- eAgent platform API ---
   eagent: {
-    submitTask: (prompt: string) => Promise<string>;
+    submitTask: (prompt: string) => Promise<{ graphId: string; rootTaskId: string; status: string }>;
     cancelGraph: (graphId: string) => Promise<void>;
     getGraph: (graphId: string) => Promise<TaskGraphState>;
     approveOversight: (requestId: string) => Promise<void>;
     denyOversight: (requestId: string) => Promise<void>;
     getProviders: () => Promise<ProviderStatus[]>;
+    configureProvider: (input: { endpoint: string; apiKey: string; model: string; name?: string }) => Promise<ProviderStatus | undefined>;
   };
 }

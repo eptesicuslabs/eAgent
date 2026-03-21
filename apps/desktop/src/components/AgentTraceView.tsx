@@ -1,89 +1,71 @@
-import { ChevronDown, ChevronRight, Circle, CheckCircle, XCircle, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { CheckCircle, ChevronRight, Circle, Loader2, XCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "~/store";
 import type { TaskGraphState, TaskNode, TraceEntry } from "~/types";
 
-function statusColor(status: string): string {
-  switch (status) {
-    case "running":
-    case "scheduled":
-      return "text-sky-400";
-    case "complete":
-      return "text-emerald-400";
-    case "failed":
-      return "text-rose-400";
-    case "cancelled":
-      return "text-zinc-500";
-    case "pending":
-    case "ready":
-      return "text-zinc-400";
-    default:
-      return "text-zinc-400";
-  }
-}
+// === Status helpers ===
 
-function StatusIcon(props: { status: string }) {
+function StatusIcon(props: { status: string; className?: string }) {
+  const cls = props.className ?? "size-4";
   switch (props.status) {
     case "running":
     case "scheduled":
-      return <Loader2 className="size-3.5 animate-spin text-sky-400" />;
+      return <Loader2 className={`${cls} animate-spin text-sky-400`} />;
     case "complete":
-      return <CheckCircle className="size-3.5 text-emerald-400" />;
+      return <CheckCircle className={`${cls} text-emerald-400`} />;
     case "failed":
-      return <XCircle className="size-3.5 text-rose-400" />;
+      return <XCircle className={`${cls} text-rose-400`} />;
     default:
-      return <Circle className="size-3.5 text-zinc-500" />;
+      return <Circle className={`${cls} text-zinc-600`} />;
   }
 }
 
-function traceKindStyle(kind: string): { label: string; color: string } {
+function statusLabel(s: string) {
+  switch (s) {
+    case "complete": return "text-emerald-400";
+    case "failed": return "text-rose-400";
+    case "running": case "scheduled": return "text-sky-400";
+    default: return "text-zinc-500";
+  }
+}
+
+// === Trace entry rendering ===
+
+function kindTag(kind: string): { text: string; cls: string } {
   switch (kind) {
-    case "thinking":
-      return { label: "think", color: "text-violet-400" };
-    case "tool-call":
-      return { label: "tool", color: "text-amber-400" };
-    case "tool-result":
-      return { label: "result", color: "text-emerald-400" };
-    case "file-change":
-      return { label: "edit", color: "text-sky-400" };
-    case "error":
-      return { label: "error", color: "text-rose-400" };
-    case "status":
-      return { label: "status", color: "text-zinc-400" };
-    default:
-      return { label: kind, color: "text-zinc-400" };
+    case "thinking": return { text: "THINK", cls: "text-violet-400/80" };
+    case "tool-call": return { text: "TOOL", cls: "text-amber-400/80" };
+    case "tool-result": return { text: "RESULT", cls: "text-emerald-400/80" };
+    case "error": return { text: "ERROR", cls: "text-rose-400" };
+    case "status": return { text: "STATUS", cls: "text-zinc-500" };
+    case "file-change": return { text: "FILE", cls: "text-sky-400/80" };
+    default: return { text: kind.toUpperCase(), cls: "text-zinc-500" };
   }
 }
 
-function TraceEntryRow(props: { entry: TraceEntry }) {
-  const style = traceKindStyle(props.entry.kind);
-  const [expanded, setExpanded] = useState(false);
+function TraceRow(props: { entry: TraceEntry }) {
+  const [open, setOpen] = useState(false);
+  const tag = kindTag(props.entry.kind);
 
   return (
-    <div className="group flex items-start gap-2 py-1">
-      <span className={`mt-0.5 w-12 shrink-0 text-right text-[10px] font-mono font-semibold ${style.color}`}>
-        {style.label}
+    <div className="group flex gap-2 py-[3px]">
+      <span className={`mt-[2px] w-[52px] shrink-0 text-right font-mono text-[10px] font-bold ${tag.cls}`}>
+        {tag.text}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-xs leading-5 text-foreground/80">
-          {props.entry.summary}
-        </p>
+        <p className="text-[12px] leading-[18px] text-foreground/75">{props.entry.summary}</p>
         {props.entry.detail ? (
           <>
             <button
-              className="mt-0.5 text-[10px] text-muted-foreground hover:text-foreground"
-              onClick={() => setExpanded((v) => !v)}
+              className="mt-0.5 inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition"
+              onClick={() => setOpen((v) => !v)}
               type="button"
             >
-              {expanded ? (
-                <ChevronDown className="inline size-3" />
-              ) : (
-                <ChevronRight className="inline size-3" />
-              )}{" "}
+              <ChevronRight className={`size-2.5 transition-transform ${open ? "rotate-90" : ""}`} />
               detail
             </button>
-            {expanded ? (
-              <pre className="mt-1 max-h-40 overflow-auto rounded bg-zinc-900/60 p-2 text-[10px] leading-4 text-zinc-400">
+            {open ? (
+              <pre className="mt-1 max-h-48 overflow-auto rounded-md bg-black/30 px-3 py-2 font-mono text-[10px] leading-4 text-zinc-400 border border-border/50">
                 {props.entry.detail}
               </pre>
             ) : null}
@@ -94,97 +76,103 @@ function TraceEntryRow(props: { entry: TraceEntry }) {
   );
 }
 
-function TaskNodeCard(props: { node: TaskNode; traces: TraceEntry[]; isSelected: boolean; onSelect: () => void }) {
+// === Task card ===
+
+function TaskCard(props: {
+  node: TaskNode;
+  traces: TraceEntry[];
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  const traceEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (props.isSelected && traceEndRef.current) {
+      traceEndRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [props.traces.length, props.isSelected]);
+
   return (
     <div
-      className={`rounded-lg border p-3 transition cursor-pointer ${
+      className={`rounded-lg border transition cursor-pointer ${
         props.isSelected
-          ? "border-sky-500/40 bg-sky-500/5"
-          : "border-border/50 bg-card/40 hover:border-border"
+          ? "border-border bg-foreground/[0.03]"
+          : "border-transparent hover:border-border/50"
       }`}
       onClick={props.onSelect}
     >
-      <div className="flex items-center gap-2">
-        <StatusIcon status={props.node.status} />
-        <span className="flex-1 text-sm font-medium text-foreground truncate">
+      {/* Header */}
+      <div className="flex items-center gap-2.5 px-3.5 py-2.5">
+        <StatusIcon status={props.node.status} className="size-3.5" />
+        <span className="flex-1 text-[13px] font-medium text-foreground/90 truncate">
           {props.node.description}
         </span>
-        <span className={`text-[10px] font-semibold tracking-wider uppercase ${statusColor(props.node.status)}`}>
+        <span className={`text-[10px] font-semibold tracking-wider uppercase ${statusLabel(props.node.status)}`}>
           {props.node.status}
         </span>
       </div>
 
+      {/* Error */}
       {props.node.error ? (
-        <p className="mt-2 text-xs text-rose-300 bg-rose-500/10 rounded px-2 py-1">
+        <div className="mx-3.5 mb-2.5 rounded-md bg-rose-500/10 border border-rose-500/20 px-3 py-1.5 text-[11px] text-rose-300">
           {props.node.error}
-        </p>
-      ) : null}
-
-      {props.isSelected && props.traces.length > 0 ? (
-        <div className="mt-3 border-t border-border/30 pt-2">
-          {props.traces.map((entry) => (
-            <TraceEntryRow key={entry.id} entry={entry} />
-          ))}
         </div>
       ) : null}
 
+      {/* Traces (only if selected) */}
+      {props.isSelected && props.traces.length > 0 ? (
+        <div className="border-t border-border/40 px-3.5 py-2 max-h-[400px] overflow-y-auto">
+          {props.traces.map((entry) => (
+            <TraceRow key={entry.id} entry={entry} />
+          ))}
+          <div ref={traceEndRef} />
+        </div>
+      ) : null}
+
+      {/* Loading state */}
       {props.isSelected && props.traces.length === 0 && props.node.status === "running" ? (
-        <p className="mt-3 text-xs text-muted-foreground animate-pulse">
-          Agent working...
-        </p>
+        <div className="border-t border-border/40 px-3.5 py-3">
+          <p className="text-[11px] text-muted-foreground/60 animate-pulse">Agent working...</p>
+        </div>
       ) : null}
     </div>
   );
 }
 
+// === Main view ===
+
 export function AgentTraceView() {
-  const selectedGraphId = useStore((state) => state.selectedGraphId);
-  const activeGraphs = useStore((state) => state.activeGraphs);
-  const selectedTaskId = useStore((state) => state.selectedTaskId);
-  const selectTask = useStore((state) => state.selectTask);
+  const selectedGraphId = useStore((s) => s.selectedGraphId);
+  const activeGraphs = useStore((s) => s.activeGraphs);
+  const selectedTaskId = useStore((s) => s.selectedTaskId);
+  const selectTask = useStore((s) => s.selectTask);
 
   if (!selectedGraphId) return null;
   const graph = activeGraphs.get(selectedGraphId);
   if (!graph) return null;
 
   const nodes = Object.values(graph.nodes);
-  const firstTaskId = nodes[0]?.id ?? null;
-  const activeTaskId = selectedTaskId ?? firstTaskId;
+  const activeTaskId = selectedTaskId ?? nodes[0]?.id ?? null;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="shrink-0 border-b border-border/50 bg-card/50 px-5 py-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-semibold tracking-[0.2em] text-muted-foreground uppercase">
-              Task Graph
-            </p>
-            <p className="mt-1 text-sm font-medium text-foreground truncate max-w-[500px]">
+      <div className="shrink-0 border-b border-border px-5 py-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[13px] font-medium text-foreground truncate">
               {graph.userPrompt}
             </p>
           </div>
-          <span
-            className={`rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-wider uppercase ${
-              graph.status === "complete"
-                ? "bg-emerald-500/15 text-emerald-300"
-                : graph.status === "failed"
-                  ? "bg-rose-500/15 text-rose-300"
-                  : graph.status === "running"
-                    ? "bg-sky-500/15 text-sky-300"
-                    : "bg-zinc-500/15 text-zinc-300"
-            }`}
-          >
-            {graph.status}
-          </span>
+          <GraphStatusBadge status={graph.status} />
         </div>
       </div>
 
-      {/* Task list with traces */}
-      <div className="flex-1 overflow-auto px-5 py-4">
-        <div className="grid gap-3">
+      {/* Task list */}
+      <div className="flex-1 overflow-y-auto px-4 py-3">
+        <div className="grid gap-1.5 max-w-3xl mx-auto">
           {nodes.map((node) => (
-            <TaskNodeCard
+            <TaskCard
               key={node.id}
               node={node}
               traces={graph.traces[node.id] ?? []}
@@ -195,5 +183,21 @@ export function AgentTraceView() {
         </div>
       </div>
     </div>
+  );
+}
+
+function GraphStatusBadge(props: { status: TaskGraphState["status"] }) {
+  const cls = {
+    complete: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    failed: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+    running: "bg-sky-500/10 text-sky-400 border-sky-500/20",
+    planning: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+    paused: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
+  }[props.status] ?? "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
+
+  return (
+    <span className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase ${cls}`}>
+      {props.status}
+    </span>
   );
 }

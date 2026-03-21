@@ -490,11 +490,68 @@ impl RuntimeEngine {
                         completed_keys.push(key);
                         tracing::info!(?graph_id, ?task_id, "task failed");
                     }
+                    AgentMessage::SubTaskProposal {
+                        task_id: parent_tid,
+                        sub_tasks,
+                        edges: new_edges,
+                    } => {
+                        let parent_tid = *parent_tid;
+                        // Get parent depth for limit check
+                        let parent_depth = {
+                            let graphs = self.graphs.read().await;
+                            graphs
+                                .get(&graph_id)
+                                .and_then(|g| g.nodes.get(&parent_tid))
+                                .map(|n| n.depth)
+                                .unwrap_or(0)
+                        };
+
+                        const MAX_DEPTH: u32 = 5;
+                        if parent_depth >= MAX_DEPTH {
+                            tracing::warn!(
+                                ?graph_id, ?parent_tid, parent_depth,
+                                "SubTaskProposal rejected: max depth reached"
+                            );
+                        } else {
+                            // Add child nodes and edges to the graph
+                            let child_count = sub_tasks.len();
+                            {
+                                let mut graphs = self.graphs.write().await;
+                                if let Some(graph) = graphs.get_mut(&graph_id) {
+                                    for mut child in sub_tasks.clone() {
+                                        child.parent_task_id = Some(parent_tid);
+                                        child.depth = parent_depth + 1;
+                                        child.status = TaskStatus::Pending;
+                                        graph.nodes.insert(child.id, child);
+                                    }
+                                    for edge in new_edges {
+                                        graph.edges.push(*edge);
+                                    }
+                                    // Update ready states so new tasks get scheduled
+                                    Scheduler::update_ready_states(graph);
+                                }
+                            }
+
+                            tracing::info!(
+                                ?graph_id, ?parent_tid,
+                                children = child_count,
+                                depth = parent_depth + 1,
+                                "agent spawned child tasks"
+                            );
+
+                            // Notify UI about new children — the scheduling loop will
+                            // emit TaskScheduled/TaskStarted as they get picked up
+                            for child in sub_tasks {
+                                let _ = self.event_tx.send(RuntimeEvent::TaskScheduled {
+                                    graph_id,
+                                    task_id: child.id,
+                                });
+                            }
+                        }
+                    }
                     _ => {
-                        // Forward all messages (ToolRequest, StatusUpdate, etc.)
-                        // Tool execution is now handled inside the agent loop itself
-                        // (see agent_pool.rs::run_agent_loop), so we just relay to UI.
-                        // Forward all other messages (StatusUpdate, etc.)
+                        // Forward all other messages (StatusUpdate, ToolRequest, etc.)
+                        // Tool execution is handled inside the agent loop.
                         let _ = self.event_tx.send(RuntimeEvent::AgentMessage {
                             graph_id,
                             task_id,
@@ -515,7 +572,10 @@ impl RuntimeEngine {
     }
 
     /// Mark a graph as completed, persist the event, and evict from active set.
+    /// Emits the final graph snapshot BEFORE evicting so the event bridge can
+    /// send the "complete" status to the UI (avoids race condition).
     async fn complete_graph(&self, graph_id: TaskGraphId) {
+        // Emit GraphCompleted first — event bridge will fetch graph while it still exists
         let _ = self.event_tx.send(RuntimeEvent::GraphCompleted { graph_id });
 
         self.persist_event(&TaskGraphEvent::GraphCompleted {
@@ -523,6 +583,9 @@ impl RuntimeEngine {
             timestamp: chrono::Utc::now(),
         })
         .ok();
+
+        // Small yield to let the event bridge process GraphCompleted before eviction
+        tokio::task::yield_now().await;
 
         // Evict from active graphs so we don't re-process
         {
@@ -567,6 +630,8 @@ mod tests {
             constraints: TaskConstraints::default(),
             result: None,
             trace: vec![],
+            parent_task_id: None,
+            depth: 0,
         }
     }
 

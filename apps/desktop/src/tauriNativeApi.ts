@@ -102,7 +102,9 @@ export function createTauriNativeApi(): NativeApi {
     // --- eAgent platform API ---
     eagent: {
       submitTask: (prompt) =>
-        safeInvoke<string>("eagent_submit_task", { prompt }, ""),
+        safeInvoke<{ graphId: string; rootTaskId: string; status: string }>(
+          "eagent_submit_task", { prompt }, { graphId: "", rootTaskId: "", status: "failed" }
+        ),
       cancelGraph: (graphId) =>
         safeInvoke<void>("eagent_cancel_graph", { graphId }),
       getGraph: (graphId) =>
@@ -125,6 +127,8 @@ export function createTauriNativeApi(): NativeApi {
         safeInvoke<void>("eagent_deny_oversight", { requestId }),
       getProviders: () =>
         safeInvoke<ProviderStatus[]>("eagent_get_providers", undefined, []),
+      configureProvider: (input: { endpoint: string; apiKey: string; model: string; name?: string }) =>
+        safeInvoke<ProviderStatus>("eagent_configure_provider", { input }),
     },
   };
 }

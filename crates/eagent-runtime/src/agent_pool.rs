@@ -439,6 +439,8 @@ mod tests {
             constraints: eagent_protocol::messages::TaskConstraints::default(),
             result: None,
             trace: vec![],
+            parent_task_id: None,
+            depth: 0,
         };
 
         let ctx = AgentContext {

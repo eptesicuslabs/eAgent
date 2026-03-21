@@ -45,6 +45,8 @@ impl SimplePlanner {
             constraints: TaskConstraints::default(),
             result: None,
             trace: vec![],
+            parent_task_id: None,
+            depth: 0,
         };
 
         let mut nodes = HashMap::new();

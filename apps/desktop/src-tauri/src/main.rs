@@ -67,7 +67,7 @@ fn run() -> Result<()> {
             eagent_tools::register_builtin_tools(&mut tool_registry);
             let tool_registry = Arc::new(tool_registry);
 
-            let mut provider_registry = ProviderRegistry::new();
+            let provider_registry = ProviderRegistry::new();
 
             // Register ApiKeyProvider from environment variables if set
             if let Ok(api_key) = std::env::var("EAGENT_API_KEY") {
@@ -169,7 +169,8 @@ fn run() -> Result<()> {
             commands::eagent::eagent_cancel_graph,
             commands::eagent::eagent_get_providers,
             commands::eagent::eagent_approve_oversight,
-            commands::eagent::eagent_deny_oversight
+            commands::eagent::eagent_deny_oversight,
+            commands::eagent::eagent_configure_provider
         ])
         .run(tauri::generate_context!())?;
 

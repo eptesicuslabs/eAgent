@@ -244,6 +244,8 @@ fn parse_plan_response(response: &str, user_prompt: &str) -> Result<TaskGraph, P
                 constraints: TaskConstraints::default(),
                 result: None,
                 trace: vec![],
+                parent_task_id: None,
+                depth: 0,
             },
         );
     }

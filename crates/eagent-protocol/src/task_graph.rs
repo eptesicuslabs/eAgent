@@ -25,6 +25,12 @@ pub struct TaskNode {
     pub constraints: crate::messages::TaskConstraints,
     pub result: Option<Value>,
     pub trace: Vec<TraceEntry>,
+    /// Parent task that spawned this node (None for root-level tasks).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_task_id: Option<TaskId>,
+    /// Current depth in the recursive tree (0 = root level).
+    #[serde(default)]
+    pub depth: u32,
 }
 
 /// Status of a task within the graph.

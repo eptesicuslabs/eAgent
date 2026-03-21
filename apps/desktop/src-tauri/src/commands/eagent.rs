@@ -2,7 +2,9 @@ use crate::{DesktopShellState, EAgentState};
 use eagent_planner::llm::LlmPlanner;
 use eagent_planner::simple::SimplePlanner;
 use eagent_protocol::ids::TaskGraphId;
-use serde::Serialize;
+use eagent_providers::api_key::{ApiKeyConfig, ApiKeyProvider};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tauri::State;
 
 /// Response payload returned after submitting a task to the planner.
@@ -131,4 +133,45 @@ pub async fn eagent_deny_oversight(
 ) -> Result<(), String> {
     // TODO: forward to the oversight channel in RuntimeEngine
     Ok(())
+}
+
+/// Input for configuring an API provider at runtime.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigureProviderInput {
+    pub endpoint: String,
+    pub api_key: String,
+    pub model: String,
+    pub name: Option<String>,
+}
+
+/// Configure an OpenAI-compatible API provider at runtime.
+/// Supports NVIDIA NIM, OpenAI, Anthropic-compatible, Together, etc.
+#[tauri::command]
+pub async fn eagent_configure_provider(
+    input: ConfigureProviderInput,
+    eagent: State<'_, EAgentState>,
+) -> Result<ProviderInfo, String> {
+    let provider_name = input.name.unwrap_or_else(|| "api-key".into());
+
+    let config = ApiKeyConfig {
+        endpoint: input.endpoint,
+        api_key: input.api_key,
+        default_model: input.model,
+        ..Default::default()
+    };
+
+    eagent.provider_registry.register(
+        provider_name.clone(),
+        Arc::new(ApiKeyProvider::new(config)),
+    );
+
+    tracing::info!(provider = %provider_name, "provider configured via settings");
+
+    Ok(ProviderInfo {
+        id: provider_name.clone(),
+        name: provider_name,
+        kind: "api-key".into(),
+        is_available: true,
+    })
 }
