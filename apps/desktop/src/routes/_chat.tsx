@@ -13,7 +13,7 @@ function ChatLayoutRoute() {
   return (
     <div className="grid h-screen w-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-background text-foreground">
       <TopBar />
-      <div className="grid min-h-0 grid-cols-[240px_minmax(0,1fr)] overflow-hidden">
+      <div className="grid min-h-0 grid-cols-[200px_minmax(0,1fr)] overflow-hidden">
         <Sidebar />
         <main className="min-w-0 overflow-hidden">
           <Outlet />
